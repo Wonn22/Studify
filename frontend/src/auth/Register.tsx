@@ -33,7 +33,6 @@ export default function Register() {
             if (error) throw error;
 
             if (data.user) {
-                // Post new user to the profiles table
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .insert([
@@ -49,7 +48,6 @@ export default function Register() {
             }
 
             setSuccessMsg('Registration successful! You can now log in.');
-            // Automatically clear form or navigate as needed
         } catch (err: any) {
             setError(err.message || 'Failed to register.');
         } finally {
