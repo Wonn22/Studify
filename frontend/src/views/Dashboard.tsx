@@ -25,6 +25,7 @@ const Dashboard = () => {
     const [activities, setActivities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [weeklyStats, setWeeklyStats] = useState({ thisWeekHours: 0, lastWeekHours: 0, consistencyDays: 0 });
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -62,6 +63,39 @@ const Dashboard = () => {
 
                     sessionData.sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
+                    const now = new Date();
+                    const startOfThisWeek = new Date(now);
+                    startOfThisWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                    startOfThisWeek.setHours(0, 0, 0, 0);
+                    const startOfLastWeek = new Date(startOfThisWeek);
+                    startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
+
+                    const thisWeekSessions = sessionData.filter((s: any) => {
+                        const d = new Date(s.scheduled_at);
+                        return d >= startOfThisWeek && d <= now;
+                    });
+                    const lastWeekSessions = sessionData.filter((s: any) => {
+                        const d = new Date(s.scheduled_at);
+                        return d >= startOfLastWeek && d < startOfThisWeek;
+                    });
+
+                    const thisWeekMinutes = thisWeekSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
+                    const lastWeekMinutes = lastWeekSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
+
+                    const sevenDaysAgo = new Date(now);
+                    sevenDaysAgo.setDate(now.getDate() - 7);
+                    const activeDays = new Set(
+                        sessionData
+                            .filter((s: any) => new Date(s.scheduled_at) >= sevenDaysAgo)
+                            .map((s: any) => new Date(s.scheduled_at).toDateString())
+                    );
+
+                    setWeeklyStats({
+                        thisWeekHours: Math.round((thisWeekMinutes / 60) * 10) / 10,
+                        lastWeekHours: Math.round((lastWeekMinutes / 60) * 10) / 10,
+                        consistencyDays: activeDays.size,
+                    });
+
                     const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
                         const date = new Date(s.scheduled_at);
                         const endTime = new Date(date.getTime() + s.duration_minutes * 60000);
@@ -73,7 +107,7 @@ const Dashboard = () => {
                             time: timeStr,
                             tag: s.subject,
                             isGroup: true,
-                            members: Math.floor(Math.random() * 3) + 2 // Mock members for now
+                            members: Math.floor(Math.random() * 3) + 2
                         };
                     });
                     setSessions(mappedSessions);
@@ -90,7 +124,8 @@ const Dashboard = () => {
                         id: p.id,
                         name: p.full_name || 'Anonymous User',
                         major: p.major || 'Undeclared',
-                        tags: ['Studify Member']
+                        tags: ['Studify Member'],
+                        avatarUrl: p.avatar_url || null
                     }));
                     setPartners(mappedPartners);
                 }
@@ -169,16 +204,15 @@ const Dashboard = () => {
                     </div>
 
                     <div className="col-span-12 lg:col-span-4 space-y-8">
-                        <StatsCard time={`${profile?.total_study_time_hours || 0}h`} consistency={profile?.consistency_percent || 0} />
+                        <StatsCard
+                            thisWeekHours={weeklyStats.thisWeekHours}
+                            lastWeekHours={weeklyStats.lastWeekHours}
+                            consistencyDays={weeklyStats.consistencyDays}
+                        />
                         <ActivityFeed activities={activities} />
                     </div>
                 </div>
             </main>
-
-            <button className="fixed bottom-8 right-8 bg-primary-container text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl shadow-primary/40 hover:scale-110 active:scale-95 transition-all z-40 group">
-                <span className="material-symbols-outlined">chat</span>
-                <span className="absolute right-full mr-4 bg-primary px-4 py-2 rounded text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Quick Message</span>
-            </button>
 
             {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} />}
         </div>

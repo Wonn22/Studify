@@ -2,15 +2,17 @@ interface PartnerProps {
     name: string;
     major: string;
     tags: string[];
-    avatarUrl?: string;
+    avatarUrl?: string | null;
 }
 
 const MatchPartnerCard = ({ name, major, tags, avatarUrl }: PartnerProps) => {
+    const avatarSrc = avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`;
+
     return (
         <div className="bg-white p-6 rounded-lg border-l-4 border-blue-900 shadow-sm hover:shadow-md transition-shadow">
             <img
                 className="w-16 h-16 rounded-lg object-cover mb-4 grayscale hover:grayscale-0 transition-all duration-500"
-                src={avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`}
+                src={avatarSrc}
                 alt={name}
             />
             <h4 className="font-bold text-slate-950 font-headline">{name}</h4>

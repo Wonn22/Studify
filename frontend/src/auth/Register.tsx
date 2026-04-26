@@ -26,7 +26,7 @@ export default function Register() {
 
         try {
             const { data, error } = await supabase.auth.signUp({
-                email,
+                email: email.trim(),
                 password,
             });
 
@@ -47,7 +47,9 @@ export default function Register() {
                 }
             }
 
-            setSuccessMsg('Registration successful! You can now log in.');
+            // Sign out the auto-created session so user must log in manually
+            await supabase.auth.signOut();
+            navigate('/login');
         } catch (err: any) {
             setError(err.message || 'Failed to register.');
         } finally {
@@ -72,7 +74,7 @@ export default function Register() {
                     <form onSubmit={handleRegister} className="space-y-6">
                         <div className="space-y-4">
                             <div className="group">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="email">Academic Email</label>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="email">Email</label>
                                 <input
                                     className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
                                     id="email"
@@ -85,7 +87,7 @@ export default function Register() {
                             </div>
 
                             <div className="group">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="password">Secret Key</label>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="password">Password</label>
                                 <div className="relative">
                                     <input
                                         className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
@@ -109,7 +111,7 @@ export default function Register() {
                             </div>
 
                             <div className="group">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="confirm-password">Confirm Secret Key</label>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2" htmlFor="confirm-password">Confirm Password</label>
                                 <input
                                     className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
                                     id="confirm-password"
