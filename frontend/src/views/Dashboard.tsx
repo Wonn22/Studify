@@ -1,13 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
+import DashboardHeader from '../components/DashboardHeader';
+import SessionCard from '../components/SessionCard';
+import MatchPartnerCard from '../components/MatchPartnerCard';
+import StatsCard from '../components/StatsCard';
+import ActivityFeed from '../components/MessagesFeed';
+import CalendarModal from '../components/CalendarModal';
+
+interface Profile {
+    id: string;
+    full_name: string;
+    total_study_time_hours: number;
+    consistency_percent: number;
+    major?: string;
+}
 
 const Dashboard = () => {
-    const [profile, setProfile] = useState<any>(null);
-    const [sessions, setSessions] = useState<any[]>([]);
-    const [recentActivity, setRecentActivity] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [partners, setPartners] = useState<any[]>([]);
+    const [activities, setActivities] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -21,35 +38,85 @@ const Dashboard = () => {
                     return;
                 }
 
-                const { data: profileData, error: profileError } = await supabase
+                const { data: profileData } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', user.id)
                     .single();
 
-                const { data: sessionData } = await supabase
-                    .from('sessions')
-                    .select('*')
-                    .order('scheduled_at', { ascending: true })
-                    .limit(2);
+                setProfile(profileData as Profile);
 
-                const { data: activityData } = await supabase
-                    .from('messages')
+                const { data: participantData } = await supabase
+                    .from('session_participants')
                     .select(`
-                        id,
-                        content,
-                        sender_id,
-                        sender:profiles!messages_sender_id_fkey (
-                            full_name
+                        sessions (
+                            id, title, subject, scheduled_at, duration_minutes
                         )
                     `)
+                    .eq('profile_id', user.id);
+
+                if (participantData) {
+                    let sessionData = participantData
+                        .map((p: any) => p.sessions)
+                        .filter((s: any) => s !== null);
+
+                    sessionData.sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+
+                    const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
+                        const date = new Date(s.scheduled_at);
+                        const endTime = new Date(date.getTime() + s.duration_minutes * 60000);
+                        const timeStr = `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+                        return {
+                            id: s.id,
+                            title: s.title,
+                            time: timeStr,
+                            tag: s.subject,
+                            isGroup: true,
+                            members: Math.floor(Math.random() * 3) + 2 // Mock members for now
+                        };
+                    });
+                    setSessions(mappedSessions);
+                }
+
+                const { data: profilesData } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .neq('id', user.id)
+                    .limit(3);
+
+                if (profilesData) {
+                    const mappedPartners = profilesData.map((p: any) => ({
+                        id: p.id,
+                        name: p.full_name || 'Anonymous User',
+                        major: p.major || 'Undeclared',
+                        tags: ['Studify Member']
+                    }));
+                    setPartners(mappedPartners);
+                }
+
+                const { data: messageData } = await supabase
+                    .from('messages')
+                    .select('id, content, created_at, sender:profiles!messages_sender_id_fkey (full_name)')
                     .eq('receiver_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(3);
 
-                setProfile(profileData);
-                setSessions(sessionData || []);
-                setRecentActivity(activityData || []);
+                if (messageData) {
+                    const mappedActivities = messageData.map((m: any) => {
+                        const diff = Math.floor((new Date().getTime() - new Date(m.created_at).getTime()) / 60000);
+                        const timeStr = diff < 60 ? `${diff} MIN AGO` : diff < 1440 ? `${Math.floor(diff / 60)} HOURS AGO` : 'YESTERDAY';
+                        return {
+                            id: m.id,
+                            title: `Message from ${m.sender?.full_name || 'Unknown'}`,
+                            content: m.content,
+                            time: timeStr,
+                            active: diff < 60
+                        };
+                    });
+                    setActivities(mappedActivities);
+                }
+
             } catch (err) {
                 console.error("Error loading dashboard:", err);
             } finally {
@@ -60,118 +127,60 @@ const Dashboard = () => {
         fetchDashboardData();
     }, [navigate]);
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
-        navigate('/login');
-    };
-
     if (loading) return (
-        <div className="flex h-screen items-center justify-center bg-surface font-manrope">
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-on-surface-variant">Synchronizing atelier data...</p>
-            </div>
+        <div className="flex h-screen items-center justify-center bg-white font-body">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-surface p-8 font-inter">
-            <header className="max-w-7xl mx-auto mb-12 flex justify-between items-end">
-                <div>
-                    <span className="text-[10px] tracking-[0.2em] font-bold text-outline uppercase block mb-2">
-                        Academic Year 2024
-                    </span>
-                    <h1 className="text-5xl font-extrabold text-primary font-manrope tracking-tight">
-                        Welcome back, {profile?.full_name || 'Scholar'}.
-                    </h1>
-                    <p className="text-on-surface-variant mt-4 text-lg font-light leading-relaxed">
-                        You have {sessions.length} study sessions scheduled for today.
-                    </p>
-                </div>
-                <div className="flex gap-4">
-                    <button
-                        onClick={handleLogout}
-                        className="px-6 py-4 rounded-xl font-bold text-on-surface-variant hover:text-error transition-colors"
-                    >
-                        Sign Out
-                    </button>
-                    <button className="bg-primary-container text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2 hover:bg-primary transition-all active:scale-95 shadow-xl shadow-primary-container/20">
-                        <span className="material-symbols-outlined">add</span>
-                        Start New Session
-                    </button>
-                </div>
-            </header>
+        <div className="min-h-screen bg-white text-on-surface font-body">
+            <Navbar />
 
-            <div className="max-w-7xl mx-auto grid grid-cols-12 gap-8">
-                <div className="col-span-12 lg:col-span-8 space-y-12">
-                    <section>
-                        <h2 className="text-2xl font-bold text-primary mb-6 font-manrope">Upcoming Sessions</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {sessions.length > 0 ? sessions.map((session) => (
-                                <div key={session.id} className="bg-white p-8 rounded-2xl border border-outline-variant/30 hover:shadow-2xl transition-all group">
-                                    <span className="bg-secondary-fixed text-on-secondary-fixed text-[10px] font-black px-3 py-1 rounded-full uppercase">
-                                        {new Date(session.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                    <h3 className="text-xl font-bold mt-4 text-primary leading-tight">{session.title}</h3>
-                                    <div className="mt-6 flex items-center gap-4 text-sm text-on-surface-variant">
-                                        <span className="flex items-center gap-1">
-                                            <span className="material-symbols-outlined text-base">groups</span> {session.subject}
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                            <span className="material-symbols-outlined text-base">timer</span> {session.duration_minutes}m
-                                        </span>
-                                    </div>
-                                </div>
-                            )) : (
-                                <div className="col-span-2 p-12 text-center border-2 border-dashed border-outline-variant/30 rounded-2xl">
-                                    <p className="text-on-surface-variant italic">No sessions scheduled. Time to find a match?</p>
-                                </div>
-                            )}
+            <main className="pt-28 pb-20 max-w-[1440px] mx-auto px-8">
+                <DashboardHeader name={profile?.full_name?.split(' ')[0] || 'Scholar'} sessionCount={sessions.length} />
+
+                <div className="grid grid-cols-12 gap-8">
+                    <div className="col-span-12 lg:col-span-8 space-y-12">
+                        <div>
+                            <div className="flex justify-between items-end mb-8">
+                                <h2 className="text-2xl font-bold text-primary font-headline">Upcoming Sessions</h2>
+                                <button
+                                    onClick={() => setIsCalendarOpen(true)}
+                                    className="text-sm font-semibold text-on-primary-container border-b border-on-primary-container/30 hover:border-on-primary-container transition-all"
+                                >
+                                    View Calendar
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {sessions.map(s => <SessionCard key={s.id} {...s} />)}
+                            </div>
                         </div>
-                    </section>
-                </div>
 
-                <div className="col-span-12 lg:col-span-4 space-y-8">
-                    <div className="bg-primary text-white p-10 rounded-3xl relative overflow-hidden shadow-2xl shadow-primary/20">
-                        <div className="relative z-10">
-                            <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-8">Weekly Performance</h3>
-                            <div className="space-y-10">
-                                <div>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="text-4xl font-black font-manrope">{profile?.total_study_time_hours ?? 0}h</span>
-                                        <span className="text-xs font-bold text-secondary-fixed">+4.2h vs last week</span>
-                                    </div>
-                                    <p className="text-[10px] text-white/50 font-medium">Total Study Time</p>
-                                </div>
-                                <div>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="text-4xl font-black font-manrope">{profile?.consistency_percent ?? 0}%</span>
-                                        <span className="text-xs font-bold text-secondary-fixed">Top 5% student</span>
-                                    </div>
-                                    <p className="text-[10px] text-white/50 font-medium">Session Consistency</p>
-                                </div>
+                        <div className="pt-4">
+                            <div className="flex justify-between items-end mb-8">
+                                <h2 className="text-2xl font-bold text-primary font-headline">Potential Match Partners</h2>
+                                <span className="text-xs font-bold text-on-surface-variant/50 uppercase tracking-widest">Based on your interests</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {partners.map(p => <MatchPartnerCard key={p.id} {...p} />)}
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/20">
-                        <h3 className="text-lg font-bold text-primary mb-6 font-manrope">Recent Activity</h3>
-                        <div className="space-y-6">
-                            {recentActivity.length > 0 ? recentActivity.map((msg) => (
-                                <div key={msg.id} className="flex gap-4">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0"></div>
-                                    <div>
-                                        <p className="text-sm font-bold text-primary">Message from {msg.sender?.full_name || 'Unknown'}</p>
-                                        <p className="text-xs text-on-surface-variant line-clamp-2 italic mt-1">"{msg.content}"</p>
-                                    </div>
-                                </div>
-                            )) : (
-                                <p className="text-xs text-on-surface-variant italic">No recent messages.</p>
-                            )}
-                        </div>
+                    <div className="col-span-12 lg:col-span-4 space-y-8">
+                        <StatsCard time={`${profile?.total_study_time_hours || 0}h`} consistency={profile?.consistency_percent || 0} />
+                        <ActivityFeed activities={activities} />
                     </div>
                 </div>
-            </div>
+            </main>
+
+            <button className="fixed bottom-8 right-8 bg-primary-container text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl shadow-primary/40 hover:scale-110 active:scale-95 transition-all z-40 group">
+                <span className="material-symbols-outlined">chat</span>
+                <span className="absolute right-full mr-4 bg-primary px-4 py-2 rounded text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Quick Message</span>
+            </button>
+
+            {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} />}
         </div>
     );
 };
