@@ -8,6 +8,7 @@ import MatchPartnerCard from '../components/MatchPartnerCard';
 import StatsCard from '../components/StatsCard';
 import ActivityFeed from '../components/MessagesFeed';
 import CalendarModal from '../components/CalendarModal';
+import PartnerProfileModal from '../components/PartnerProfileModal';
 
 interface Profile {
     id: string;
@@ -25,6 +26,7 @@ const Dashboard = () => {
     const [activities, setActivities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
     const [weeklyStats, setWeeklyStats] = useState({ thisWeekHours: 0, lastWeekHours: 0, consistencyDays: 0 });
 
     useEffect(() => {
@@ -124,7 +126,7 @@ const Dashboard = () => {
                         id: p.id,
                         name: p.full_name || 'Anonymous User',
                         major: p.major || 'Undeclared',
-                        tags: ['Studify Member'],
+                        tags: Array.isArray(p.interests) && p.interests.length > 0 ? p.interests : ['No skills listed'],
                         avatarUrl: p.avatar_url || null
                     }));
                     setPartners(mappedPartners);
@@ -198,7 +200,13 @@ const Dashboard = () => {
                                 <span className="text-xs font-bold text-on-surface-variant/50 uppercase tracking-widest">Based on your interests</span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {partners.map(p => <MatchPartnerCard key={p.id} {...p} />)}
+                                {partners.map(p => (
+                                    <MatchPartnerCard
+                                        key={p.id}
+                                        {...p}
+                                        onClick={() => setSelectedPartnerId(p.id)}
+                                    />
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -215,6 +223,12 @@ const Dashboard = () => {
             </main>
 
             {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} />}
+            {selectedPartnerId && (
+                <PartnerProfileModal
+                    partnerId={selectedPartnerId}
+                    onClose={() => setSelectedPartnerId(null)}
+                />
+            )}
         </div>
     );
 };

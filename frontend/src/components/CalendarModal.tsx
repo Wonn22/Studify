@@ -20,12 +20,6 @@ const CalendarModal = ({ onClose }: CalendarModalProps) => {
                     <h3 className="font-headline text-xl font-bold uppercase tracking-wider">
                         {today.toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </h3>
-                    <button
-                        onClick={onClose}
-                        className="hover:bg-white/20 p-2 rounded-full transition-colors flex items-center justify-center"
-                    >
-                        <span className="material-symbols-outlined text-sm">close</span>
-                    </button>
                 </div>
 
                 <div className="p-8">
