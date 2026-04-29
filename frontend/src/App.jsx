@@ -3,6 +3,7 @@ import Login from './auth/Login'
 import Register from './auth/Register'
 import Dashboard from './views/Dashboard'
 import ProfilePage from './views/ProfilePage'
+import BrowseSessions from './views/BrowseSessions'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/browse-sessions" element={<BrowseSessions />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Routes>
     </BrowserRouter>

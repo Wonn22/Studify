@@ -9,6 +9,7 @@ import StatsCard from '../components/StatsCard';
 import ActivityFeed from '../components/MessagesFeed';
 import CalendarModal from '../components/CalendarModal';
 import PartnerProfileModal from '../components/PartnerProfileModal';
+import CreateSessionModal from '../components/CreateSessionModal';
 
 interface Profile {
     id: string;
@@ -26,8 +27,10 @@ const Dashboard = () => {
     const [activities, setActivities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
     const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
     const [weeklyStats, setWeeklyStats] = useState({ thisWeekHours: 0, lastWeekHours: 0, consistencyDays: 0 });
+    const [refreshTick, setRefreshTick] = useState(0);
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -109,7 +112,9 @@ const Dashboard = () => {
                             time: timeStr,
                             tag: s.subject,
                             isGroup: true,
-                            members: Math.floor(Math.random() * 3) + 2
+                            members: Math.floor(Math.random() * 3) + 2,
+                            scheduledAt: s.scheduled_at,
+                            durationMinutes: s.duration_minutes
                         };
                     });
                     setSessions(mappedSessions);
@@ -162,7 +167,7 @@ const Dashboard = () => {
         };
 
         fetchDashboardData();
-    }, [navigate]);
+    }, [navigate, refreshTick]);
 
     if (loading) return (
         <div className="flex h-screen items-center justify-center bg-white font-body">
@@ -175,7 +180,12 @@ const Dashboard = () => {
             <Navbar />
 
             <main className="pt-28 pb-20 max-w-[1440px] mx-auto px-8">
-                <DashboardHeader name={profile?.full_name?.split(' ')[0] || 'Scholar'} sessionCount={sessions.length} />
+                <DashboardHeader
+                    name={profile?.full_name?.split(' ')[0] || 'Scholar'}
+                    sessionCount={sessions.length}
+                    onNewSession={() => setIsCreateSessionOpen(true)}
+                    onBrowseSessions={() => navigate('/browse-sessions')}
+                />
 
                 <div className="grid grid-cols-12 gap-8">
                     <div className="col-span-12 lg:col-span-8 space-y-12">
@@ -223,6 +233,12 @@ const Dashboard = () => {
             </main>
 
             {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} />}
+            {isCreateSessionOpen && (
+                <CreateSessionModal
+                    onClose={() => setIsCreateSessionOpen(false)}
+                    onSessionCreated={() => setRefreshTick(t => t + 1)}
+                />
+            )}
             {selectedPartnerId && (
                 <PartnerProfileModal
                     partnerId={selectedPartnerId}

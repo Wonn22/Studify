@@ -1,9 +1,11 @@
 interface HeaderProps {
     name: string;
     sessionCount: number;
+    onNewSession: () => void;
+    onBrowseSessions?: () => void;
 }
 
-const DashboardHeader = ({ name, sessionCount }: HeaderProps) => {
+const DashboardHeader = ({ name, sessionCount, onNewSession, onBrowseSessions }: HeaderProps) => {
     return (
         <section className="grid grid-cols-12 gap-6 mb-16">
             <div className="col-span-12 md:col-span-8">
@@ -17,8 +19,20 @@ const DashboardHeader = ({ name, sessionCount }: HeaderProps) => {
                     You have <span className="font-semibold text-slate-950">{sessionCount} study sessions</span> scheduled.
                 </p>
             </div>
-            <div className="col-span-12 md:col-span-4 flex items-end justify-end">
-                <button className="bg-slate-950 text-white px-8 py-4 rounded-md font-semibold flex items-center gap-3 hover:bg-slate-800 transition-all shadow-xl shadow-slate-950/10 active:scale-95 duration-150">
+            <div className="col-span-12 md:col-span-4 flex items-end justify-end gap-4">
+                {onBrowseSessions && (
+                    <button
+                        onClick={onBrowseSessions}
+                        className="bg-white text-slate-950 border border-slate-950 px-8 py-4 rounded-md font-semibold flex items-center gap-3 hover:bg-slate-50 transition-all active:scale-95 duration-150"
+                    >
+                        <span className="material-symbols-outlined text-sm">search</span>
+                        Browse Sessions
+                    </button>
+                )}
+                <button
+                    onClick={onNewSession}
+                    className="bg-slate-950 text-white px-8 py-4 rounded-md font-semibold flex items-center gap-3 hover:bg-slate-800 transition-all shadow-xl shadow-slate-950/10 active:scale-95 duration-150"
+                >
                     <span className="material-symbols-outlined text-sm">add</span>
                     Start New Session
                 </button>
