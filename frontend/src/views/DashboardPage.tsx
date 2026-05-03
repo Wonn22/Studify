@@ -84,22 +84,7 @@ const Dashboard = () => {
                         return d >= startOfLastWeek && d < startOfThisWeek;
                     });
 
-                    const thisWeekMinutes = thisWeekSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
-                    const lastWeekMinutes = lastWeekSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
-
-                    const sevenDaysAgo = new Date(now);
-                    sevenDaysAgo.setDate(now.getDate() - 7);
-                    const activeDays = new Set(
-                        sessionData
-                            .filter((s: any) => new Date(s.scheduled_at) >= sevenDaysAgo)
-                            .map((s: any) => new Date(s.scheduled_at).toDateString())
-                    );
-
-                    setWeeklyStats({
-                        thisWeekHours: Math.round((thisWeekMinutes / 60) * 10) / 10,
-                        lastWeekHours: Math.round((lastWeekMinutes / 60) * 10) / 10,
-                        consistencyDays: activeDays.size,
-                    });
+                    // The stats are now pulled directly from the profile table instead of calculating dynamically
 
                     const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
                         const date = new Date(s.scheduled_at);
@@ -223,9 +208,8 @@ const Dashboard = () => {
 
                     <div className="col-span-12 lg:col-span-4 space-y-8">
                         <StatsCard
-                            thisWeekHours={weeklyStats.thisWeekHours}
-                            lastWeekHours={weeklyStats.lastWeekHours}
-                            consistencyDays={weeklyStats.consistencyDays}
+                            totalStudyTime={profile?.total_study_time_hours || 0}
+                            consistencyPercent={profile?.consistency_percent || 0}
                         />
                         <ActivityFeed activities={activities} />
                     </div>

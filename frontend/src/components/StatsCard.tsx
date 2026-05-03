@@ -1,33 +1,30 @@
 interface StatsProps {
-    thisWeekHours: number;
-    lastWeekHours: number;
-    consistencyDays: number;
+    totalStudyTime: number;
+    consistencyPercent: number;
 }
 
-const StatsCard = ({ thisWeekHours, lastWeekHours, consistencyDays }: StatsProps) => {
-    const diffHours = Math.round((thisWeekHours - lastWeekHours) * 10) / 10;
-    const diffLabel = diffHours >= 0 ? `+${diffHours}h vs last week` : `${diffHours}h vs last week`;
-    const diffColor = diffHours >= 0 ? 'text-blue-300' : 'text-red-400';
-
-    const consistencyPercent = Math.round((consistencyDays / 7) * 100);
+const StatsCard = ({ totalStudyTime, consistencyPercent }: StatsProps) => {
     const consistencyLabel =
         consistencyPercent >= 80 ? 'Top 10% student' :
             consistencyPercent >= 50 ? 'Good momentum!' :
-                consistencyDays === 0 ? 'No sessions yet this week' :
-                    `${consistencyDays} active day${consistencyDays > 1 ? 's' : ''} this week`;
+                consistencyPercent === 0 ? 'No sessions yet' :
+                    `Keep it up!`;
+
+    // Calculate a rough consistencyDays equivalent for the progress bar dots
+    const consistencyDays = Math.round((consistencyPercent / 100) * 7);
 
     return (
         <div className="bg-slate-950 text-white p-10 rounded-lg relative overflow-hidden">
             <div className="absolute -bottom-8 -left-8 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
 
             <div className="relative z-10">
-                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white/40 mb-8">Weekly Performance</h2>
+                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white/40 mb-8">Overall Performance</h2>
 
                 <div className="space-y-10">
                     <div>
                         <div className="flex justify-between items-end mb-3">
-                            <span className="text-3xl font-extrabold font-headline">{thisWeekHours}h</span>
-                            <span className={`text-xs font-semibold ${diffColor}`}>{diffLabel}</span>
+                            <span className="text-3xl font-extrabold font-headline">{totalStudyTime}h</span>
+                            <span className="text-xs font-semibold text-green-400">All-time</span>
                         </div>
                         <p className="text-xs text-white/50 font-medium uppercase tracking-wider">Total Study Time</p>
                     </div>

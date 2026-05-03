@@ -28,6 +28,7 @@ const MessagesPage = () => {
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [showEmojis, setShowEmojis] = useState(false);
+    const [pendingRequests, setPendingRequests] = useState<Profile[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const emojis = ['😀', '😂', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '✨', '💯', '🤔'];
@@ -79,10 +80,59 @@ const MessagesPage = () => {
                 setContacts([]);
                 setSelectedContact(null);
             }
+
+            const { data: pendingData } = await supabase
+                .from('friendships')
+                .select('requester_id')
+                .eq('addressee_id', user.id)
+                .eq('status', 'Pending');
+            
+            if (pendingData && pendingData.length > 0) {
+                const requesterIds = pendingData.map(p => p.requester_id);
+                const { data: pendingProfiles } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .in('id', requesterIds);
+                setPendingRequests(pendingProfiles || []);
+            } else {
+                setPendingRequests([]);
+            }
+
             setLoading(false);
         };
         initialize();
     }, [navigate]);
+
+    const handleAcceptRequest = async (requesterId: string) => {
+        if (!currentUser) return;
+        const { error } = await supabase
+            .from('friendships')
+            .update({ status: 'Accepted' })
+            .eq('requester_id', requesterId)
+            .eq('addressee_id', currentUser.id);
+
+        if (!error) {
+            const acceptedUser = pendingRequests.find(p => p.id === requesterId);
+            if (acceptedUser) {
+                setPendingRequests(prev => prev.filter(p => p.id !== requesterId));
+                setContacts(prev => [...prev, acceptedUser]);
+                if (!selectedContact) setSelectedContact(acceptedUser);
+            }
+        }
+    };
+
+    const handleDeclineRequest = async (requesterId: string) => {
+        if (!currentUser) return;
+        const { error } = await supabase
+            .from('friendships')
+            .delete()
+            .eq('requester_id', requesterId)
+            .eq('addressee_id', currentUser.id);
+
+        if (!error) {
+            setPendingRequests(prev => prev.filter(p => p.id !== requesterId));
+        }
+    };
 
     useEffect(() => {
         if (!currentUser || !selectedContact) return;
@@ -206,10 +256,36 @@ const MessagesPage = () => {
         <div className="bg-surface text-on-surface overflow-hidden font-body flex flex-col h-screen">
             <Navbar />
             <div className="flex flex-1 pt-20 h-full">
-                <section className="w-80 h-full bg-surface-container-low flex flex-col border-r border-slate-200">
+                <section className="w-80 h-full bg-surface-container-low flex flex-col border-r border-slate-200 overflow-y-auto">
                     <div className="p-6">
+                        {pendingRequests.length > 0 && (
+                            <div className="mb-8">
+                                <h2 className="text-[10px] font-bold tracking-[0.2em] text-on-surface-variant uppercase mb-4 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                    Pending Invites ({pendingRequests.length})
+                                </h2>
+                                <div className="space-y-3">
+                                    {pendingRequests.map(req => (
+                                        <div key={req.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <img alt={req.full_name} className="w-8 h-8 rounded-md object-cover bg-slate-200" src={getAvatar(req.avatar_url, req.full_name)} />
+                                                <div className="flex-1 overflow-hidden">
+                                                    <p className="text-xs font-bold text-primary truncate">{req.full_name}</p>
+                                                    <p className="text-[9px] text-on-surface-variant truncate">{req.major || 'Student'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleAcceptRequest(req.id)} className="flex-1 bg-[#001F3F] text-white text-[10px] font-bold py-1.5 rounded-lg hover:bg-blue-950 transition-colors">Accept</button>
+                                                <button onClick={() => handleDeclineRequest(req.id)} className="flex-1 bg-slate-100 text-slate-600 text-[10px] font-bold py-1.5 rounded-lg hover:bg-slate-200 transition-colors">Decline</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <h2 className="text-xs font-bold tracking-[0.15em] text-on-surface-variant uppercase mb-6 font-label">Active Correspondence</h2>
-                        <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-160px)]">
+                        <div className="space-y-4">
                             {contacts.length === 0 ? (
                                 <div className="text-center p-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                                     <p className="text-sm font-medium text-slate-500 mb-3">No friends yet</p>
