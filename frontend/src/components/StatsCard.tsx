@@ -48,24 +48,6 @@ const StatsCard = ({ thisWeekHours, lastWeekHours, consistencyDays }: StatsProps
                         </div>
                     </div>
                 </div>
-
-                <div className="mt-12 pt-8 border-t border-white/10">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/5 rounded-md flex items-center justify-center">
-                            <span className="material-symbols-outlined text-blue-300">emoji_events</span>
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold">
-                                {consistencyDays >= 5 ? 'New Achievement!' : 'Keep it up!'}
-                            </p>
-                            <p className="text-xs text-white/40">
-                                {consistencyDays >= 5
-                                    ? '"Early Bird" for 5 days straight'
-                                    : `Study ${7 - consistencyDays} more day${7 - consistencyDays > 1 ? 's' : ''} to unlock "Early Bird"`}
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );

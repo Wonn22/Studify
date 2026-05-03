@@ -245,6 +245,32 @@ const Dashboard = () => {
                     onClose={() => setSelectedPartnerId(null)}
                 />
             )}
+            <footer className="w-full flex flex-col items-center gap-6 px-8 py-12 bg-[#000613] text-white">
+                <div className="flex flex-col md:flex-row justify-between w-full max-w-7xl items-center gap-8">
+                    <div className="flex flex-col gap-2 items-center md:items-start">
+                        <span className="text-white font-black text-xl tracking-tighter">Studify</span>
+                        <p className="font-body text-[0.75rem] tracking-wide text-slate-400 max-w-xs text-center md:text-left">
+                            © 2024 Studify Academic Atelier. All rights reserved.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-8">
+                        <a className="font-body text-[0.75rem] tracking-wide text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-white" href="#">Privacy Policy</a>
+                        <a className="font-body text-[0.75rem] tracking-wide text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-white" href="#">Terms of Service</a>
+                        <a className="font-body text-[0.75rem] tracking-wide text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-white" href="#">Research Ethics</a>
+                        <a className="font-body text-[0.75rem] tracking-wide text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-white" href="#">Contact Support</a>
+                    </div>
+                </div>
+                <div className="w-full max-w-7xl border-t border-white/5 pt-8 flex justify-center">
+                    <div className="flex gap-4">
+                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all cursor-pointer">
+                            <span className="material-symbols-outlined text-[1rem]">language</span>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all cursor-pointer">
+                            <span className="material-symbols-outlined text-[1rem]">share</span>
+                        </div>
+                    </div>
+                </div>
+            </footer>
         </div>
     );
 };

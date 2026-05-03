@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../database/database';
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [userName, setUserName] = useState<string>('Guest');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
@@ -45,19 +46,35 @@ const Navbar = () => {
             Studify
           </span>
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium tracking-wide">
-            <button onClick={() => navigate('/dashboard')} className="text-white border-b-2 border-white pb-1">Dashboard</button>
-            <button onClick={() => navigate('/match')} className="text-blue-200/70 hover:text-white transition-colors">Find Match</button>
-            <button onClick={() => navigate('/groups')} className="text-blue-200/70 hover:text-white transition-colors">Groups</button>
-            <button onClick={() => navigate('/messages')} className="text-blue-200/70 hover:text-white transition-colors">Messages</button>
+            <button 
+              onClick={() => navigate('/dashboard')} 
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/dashboard') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              Dashboard
+            </button>
+            <button 
+              onClick={() => navigate('/match')} 
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/match') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              Find Match
+            </button>
+            <button 
+              onClick={() => navigate('/groups')} 
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/groups') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              Groups
+            </button>
+            <button 
+              onClick={() => navigate('/messages')} 
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/messages') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              Messages
+            </button>
           </nav>
         </div>
 
         <div className="flex items-center gap-6">
-          <button className="text-white hover:bg-white/10 rounded-md transition-all p-2 flex items-center justify-center">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
-
-          <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleSignOut}
               className="text-white hover:bg-white/10 rounded-md transition-all p-2 flex items-center justify-center"
