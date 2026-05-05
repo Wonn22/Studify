@@ -3,12 +3,14 @@ import GroupCard from '../components/GroupCard';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
+import CreateGroupModal from '../components/CreateGroupModal';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("All Groups");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchGroups = async () => {
@@ -50,7 +52,7 @@ const GroupsPage = () => {
         // Fallbacks in case the SQL wasn't run
         const category = g.category || g.status || 'Active Research';
         const img = g.image_url || fallbackImages[index % fallbackImages.length];
-        const members = participantsData.filter((p: any) => p.group_id === g.id).length || 1; // Default to 1 if no participants found
+        const members = participantsData.filter((p: any) => p.group_id === g.id).length;
         
         const words = g.name.split(' ');
         const code = words.length > 1 
@@ -128,7 +130,7 @@ const GroupsPage = () => {
             <div className="p-6 rounded-xl bg-[#001F3F] text-white shadow-lg shadow-blue-900/10">
               <h3 className="font-headline font-bold text-lg mb-2">Create New Group</h3>
               <p className="text-sm text-blue-100 mb-4">Can't find your specific course? Start a new academic circle.</p>
-              <button className="w-full py-3 bg-white text-[#001F3F] font-bold rounded-md hover:shadow-xl transition-all">
+              <button onClick={() => setIsCreateModalOpen(true)} className="w-full py-3 bg-white text-[#001F3F] font-bold rounded-md hover:shadow-xl transition-all">
                 Initialize Group
               </button>
             </div>
@@ -150,11 +152,11 @@ const GroupsPage = () => {
                 {filteredGroups.map(group => (
                     <GroupCard 
                     key={group.id}
+                    id={group.id}
                     courseCode={group.code}
                     title={group.title}
                     memberCount={group.members}
                     imageUrl={group.img}
-                    groupUrl={group.groupUrl}
                     />
                 ))}
                 </div>
@@ -189,6 +191,11 @@ const GroupsPage = () => {
           </div>
         </div>
       </footer>
+
+      <CreateGroupModal 
+        isOpen={isCreateModalOpen} 
+        onClose={() => setIsCreateModalOpen(false)} 
+      />
     </div>
   );
 };

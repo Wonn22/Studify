@@ -1,14 +1,17 @@
 import React from 'react';
 
+import { useNavigate } from 'react-router-dom';
+
 interface GroupCardProps {
+  id: string;
   courseCode: string;
   title: string;
   memberCount: number;
   imageUrl: string;
-  groupUrl?: string;
 }
 
-const GroupCard: React.FC<GroupCardProps> = ({ courseCode, title, memberCount, imageUrl, groupUrl }) => {
+const GroupCard: React.FC<GroupCardProps> = ({ id, courseCode, title, memberCount, imageUrl }) => {
+  const navigate = useNavigate();
   return (
     <div className="bg-surface-container-lowest rounded-xl overflow-hidden group hover:shadow-[0_8px_30px_rgb(0,6,19,0.08)] transition-all duration-500 flex flex-col border border-outline-variant/10">
       <div className="relative h-48 overflow-hidden bg-slate-200">
@@ -28,7 +31,7 @@ const GroupCard: React.FC<GroupCardProps> = ({ courseCode, title, memberCount, i
           <span className="text-xs text-secondary font-medium">{memberCount} Active Members</span>
         </div>
         <button 
-          onClick={() => groupUrl && window.open(groupUrl, '_blank')}
+          onClick={() => navigate(`/groups/${id}`)}
           className="mt-auto w-full py-3 bg-[#001F3F] text-white font-bold rounded-md hover:bg-blue-950 transition-all duration-300 shadow-sm flex items-center justify-center gap-2"
         >
           View Group
