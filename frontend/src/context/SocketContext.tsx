@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { supabase } from '../database/database';
 
-const SOCKET_URL = 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 interface SocketContextType {
     socket: Socket | null;
@@ -12,36 +13,84 @@ const SocketContext = createContext<SocketContextType>({ socket: null, connected
 
 export const useSocket = () => useContext(SocketContext);
 
-const socket: Socket = io(SOCKET_URL, {
-    transports: ['websocket'],
-    autoConnect: true,
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-});
-
 export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
-    const [connected, setConnected] = useState(socket.connected);
+    const socketRef = useRef<Socket | null>(null);
+    const [socket, setSocket] = useState<Socket | null>(null);
+    const [connected, setConnected] = useState(false);
 
     useEffect(() => {
-        const onConnect = () => {
-            console.log('[Socket.IO] Connected:', socket.id);
-            setConnected(true);
-        };
-        const onDisconnect = () => {
-            console.log('[Socket.IO] Disconnected');
-            setConnected(false);
+        let isMounted = true;
+
+        const disconnectSocket = () => {
+            socketRef.current?.removeAllListeners();
+            socketRef.current?.disconnect();
+            socketRef.current = null;
+
+            if (isMounted) {
+                setSocket(null);
+                setConnected(false);
+            }
         };
 
-        socket.on('connect', onConnect);
-        socket.on('disconnect', onDisconnect);
+        const connectSocket = (accessToken: string) => {
+            disconnectSocket();
 
-        // If already connected when this mounts, sync state
-        if (socket.connected) setConnected(true);
+            const nextSocket = io(SOCKET_URL, {
+                transports: ['websocket'],
+                autoConnect: false,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                auth: {
+                    token: accessToken,
+                },
+            });
+
+            nextSocket.on('connect', () => {
+                console.log('[Socket.IO] Connected:', nextSocket.id);
+                if (isMounted) setConnected(true);
+            });
+
+            nextSocket.on('disconnect', () => {
+                console.log('[Socket.IO] Disconnected');
+                if (isMounted) setConnected(false);
+            });
+
+            nextSocket.on('connect_error', (error) => {
+                console.error('[Socket.IO] Connection error:', error.message);
+                if (isMounted) setConnected(false);
+            });
+
+            socketRef.current = nextSocket;
+            if (isMounted) setSocket(nextSocket);
+            nextSocket.connect();
+        };
+
+        const initializeSocket = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!isMounted) return;
+
+            if (session?.access_token) {
+                connectSocket(session.access_token);
+            } else {
+                disconnectSocket();
+            }
+        };
+
+        initializeSocket();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.access_token) {
+                connectSocket(session.access_token);
+            } else {
+                disconnectSocket();
+            }
+        });
 
         return () => {
-            socket.off('connect', onConnect);
-            socket.off('disconnect', onDisconnect);
+            isMounted = false;
+            subscription.unsubscribe();
+            disconnectSocket();
         };
     }, []);
 

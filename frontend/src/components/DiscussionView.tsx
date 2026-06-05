@@ -14,6 +14,11 @@ interface Message {
   };
 }
 
+interface SocketAck {
+  ok: boolean;
+  error?: string;
+}
+
 const DiscussionView = ({ groupId }: { groupId?: string }) => {
   const { socket } = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -130,18 +135,32 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
   const handleDeleteMessage = async (id: string) => {
     if (!currentUser || !groupId) return;
 
-    const { error } = await supabase
-      .from('messages')
-      .delete()
-      .eq('id', id)
-      .eq('sender_id', currentUser.id)
-      .eq('group_id', groupId);
-
-    if (!error) {
-      setMessages(prev => prev.filter(m => m.id !== id));
-      setConfirmDeleteMsgId(null);
-      socket?.emit('delete_group_message', { messageId: id, groupId });
+    if (!socket?.connected) {
+      alert('Realtime connection is not authenticated. Please refresh and try again.');
+      return;
     }
+
+    const response = await new Promise<SocketAck>((resolve) => {
+      socket.timeout(5000).emit(
+        'delete_group_message',
+        { messageId: id, groupId },
+        (error: Error | null, ack?: SocketAck) => {
+          if (error) {
+            resolve({ ok: false, error: 'Delete request timed out.' });
+            return;
+          }
+          resolve(ack || { ok: false, error: 'Delete request failed.' });
+        },
+      );
+    });
+
+    if (!response.ok) {
+      alert(response.error || 'Could not delete message.');
+      return;
+    }
+
+    setMessages(prev => prev.filter(m => m.id !== id));
+    setConfirmDeleteMsgId(null);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

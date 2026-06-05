@@ -26,6 +26,11 @@ interface Message {
     created_at: string;
 }
 
+interface SocketAck {
+    ok: boolean;
+    error?: string;
+}
+
 const MessagesPage = () => {
     const navigate = useNavigate();
     const { socket } = useSocket();
@@ -132,7 +137,7 @@ const MessagesPage = () => {
 
         fetchChatData();
 
-        socket.emit('join_dm_room', { userId: currentUser.id, contactId: selectedContact.id });
+        socket.emit('join_dm_room', { contactId: selectedContact.id });
 
         const onNewMessage = (msg: Message) => {
             const belongsToSelectedChat =
@@ -188,29 +193,32 @@ const MessagesPage = () => {
     const handleDeleteMessage = async (id: string) => {
         if (!currentUser || !selectedContact) return;
 
-        const { error } = await supabase
-            .from('messages')
-            .delete()
-            .eq('id', id)
-            .eq('sender_id', currentUser.id)
-            .eq('receiver_id', selectedContact.id);
+        if (!socket?.connected) {
+            alert('Realtime connection is not authenticated. Please refresh and try again.');
+            return;
+        }
 
-        if (error) {
-            console.error('Delete error:', error.message, error.code);
-            alert(`Could not delete message: ${error.message}`);
+        const response = await new Promise<SocketAck>((resolve) => {
+            socket.timeout(5000).emit(
+                'delete_message',
+                { messageId: id, contactId: selectedContact.id },
+                (error: Error | null, ack?: SocketAck) => {
+                    if (error) {
+                        resolve({ ok: false, error: 'Delete request timed out.' });
+                        return;
+                    }
+                    resolve(ack || { ok: false, error: 'Delete request failed.' });
+                },
+            );
+        });
+
+        if (!response.ok) {
+            alert(response.error || 'Could not delete message.');
             return;
         }
 
         setMessages(prev => prev.filter(m => m.id !== id));
         setConfirmDeleteMsgId(null);
-
-        if (currentUser && selectedContact) {
-            socket?.emit('delete_message', {
-                messageId: id,
-                userId: currentUser.id,
-                contactId: selectedContact.id,
-            });
-        }
     };
 
     const handleShareLink = async () => {

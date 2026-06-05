@@ -2,94 +2,382 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import path from 'path';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../frontend/.env.local') });
 
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Missing SUPABASE_URL/SUPABASE_ANON_KEY environment variables');
+}
+
+const adminSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+    },
+});
+
+type SocketAck = {
+    ok: boolean;
+    error?: string;
+};
+
+type DirectMessage = {
+    id: string;
+    sender_id: string;
+    receiver_id: string;
+    content: string;
+    created_at: string;
+};
+
+type GroupMessage = {
+    id: string;
+    sender_id: string;
+    group_id: string;
+    content: string;
+    created_at: string;
+    profiles?: { full_name: string; avatar_url: string };
+};
+
+type AuthedSocketData = {
+    user: User;
+    accessToken: string;
+    supabase: SupabaseClient;
+};
+
+const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isValidUuid = (value: unknown): value is string =>
+    typeof value === 'string' && UUID_PATTERN.test(value);
+
+const getAuthenticatedSocket = (socket: Socket) => socket as Socket & { data: AuthedSocketData };
+
+const getRoomId = (userId: string, contactId: string) => [userId, contactId].sort().join('_');
+
+const getBearerToken = (socket: Socket) => {
+    const authToken = socket.handshake.auth?.token;
+    if (typeof authToken === 'string' && authToken.trim()) {
+        return authToken.trim();
+    }
+
+    const authorization = socket.handshake.headers.authorization;
+    if (typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+        return authorization.slice('Bearer '.length).trim();
+    }
+
+    return null;
+};
+
+const createUserScopedClient = (accessToken: string) =>
+    createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        },
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+        },
+    });
+
+const isAcceptedFriend = async (client: SupabaseClient, userId: string, contactId: string) => {
+    if (!isValidUuid(userId) || !isValidUuid(contactId) || userId === contactId) return false;
+
+    const { data, error } = await client
+        .from('friendships')
+        .select('id')
+        .eq('status', 'Accepted')
+        .or(
+            `and(requester_id.eq.${userId},addressee_id.eq.${contactId}),and(requester_id.eq.${contactId},addressee_id.eq.${userId})`,
+        )
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[WS] Friendship check failed:', error.message);
+        return false;
+    }
+
+    return Boolean(data);
+};
+
+const isGroupMember = async (client: SupabaseClient, userId: string, groupId: string) => {
+    if (!isValidUuid(userId) || !isValidUuid(groupId)) return false;
+
+    const { data, error } = await client
+        .from('group_participants')
+        .select('group_id')
+        .eq('group_id', groupId)
+        .eq('profile_id', userId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[WS] Group membership check failed:', error.message);
+        return false;
+    }
+
+    return Boolean(data);
+};
+
+const findPersistedDirectMessage = async (
+    client: SupabaseClient,
+    message: DirectMessage,
+    userId: string,
+) => {
+    if (
+        !isValidUuid(message.id) ||
+        !isValidUuid(message.sender_id) ||
+        !isValidUuid(message.receiver_id) ||
+        message.sender_id !== userId
+    ) {
+        return null;
+    }
+
+    const { data, error } = await client
+        .from('messages')
+        .select('id, sender_id, receiver_id, content, created_at')
+        .eq('id', message.id)
+        .eq('sender_id', userId)
+        .eq('receiver_id', message.receiver_id)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[WS] Direct message lookup failed:', error.message);
+        return null;
+    }
+
+    return data as DirectMessage | null;
+};
+
+const findPersistedGroupMessage = async (
+    client: SupabaseClient,
+    message: GroupMessage,
+    userId: string,
+) => {
+    if (
+        !isValidUuid(message.id) ||
+        !isValidUuid(message.sender_id) ||
+        !isValidUuid(message.group_id) ||
+        message.sender_id !== userId
+    ) {
+        return null;
+    }
+
+    const { data, error } = await client
+        .from('messages')
+        .select('id, sender_id, group_id, content, created_at')
+        .eq('id', message.id)
+        .eq('sender_id', userId)
+        .eq('group_id', message.group_id)
+        .maybeSingle();
+
+    if (error) {
+        console.error('[WS] Group message lookup failed:', error.message);
+        return null;
+    }
+
+    return data as GroupMessage | null;
+};
+
+const acknowledge = (ack: ((response: SocketAck) => void) | undefined, response: SocketAck) => {
+    if (typeof ack === 'function') {
+        ack(response);
+    }
+};
 
 const io = new Server(httpServer, {
     cors: {
-        origin: 'http://localhost:5173',
+        origin: FRONTEND_ORIGIN,
         methods: ['GET', 'POST'],
     },
 });
 
-app.use(cors());
+app.use(cors({ origin: FRONTEND_ORIGIN }));
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Studify Backend is running');
 });
 
-// ─── SOCKET.IO ───────────────────────────────────────────────
+io.use(async (socket, next) => {
+    const accessToken = getBearerToken(socket);
+    if (!accessToken) {
+        next(new Error('UNAUTHORIZED'));
+        return;
+    }
+
+    const { data, error } = await adminSupabase.auth.getUser(accessToken);
+    if (error || !data.user) {
+        next(new Error('UNAUTHORIZED'));
+        return;
+    }
+
+    const authedSocket = getAuthenticatedSocket(socket);
+    authedSocket.data.user = data.user;
+    authedSocket.data.accessToken = accessToken;
+    authedSocket.data.supabase = createUserScopedClient(accessToken);
+    next();
+});
+
 io.on('connection', (socket) => {
-    console.log(`[WS] Client connected: ${socket.id}`);
+    const authedSocket = getAuthenticatedSocket(socket);
+    const userId = authedSocket.data.user.id;
 
-    // ── DIRECT MESSAGES ──────────────────────────────────────
+    console.log(`[WS] Authenticated client connected: ${socket.id} user=${userId}`);
 
-    // Join a unique room for a DM conversation between two users
-    socket.on('join_dm_room', ({ userId, contactId }: { userId: string; contactId: string }) => {
-        // Room ID is deterministic regardless of who initiates
-        const roomId = [userId, contactId].sort().join('_');
+    socket.on('join_dm_room', async ({ contactId }: { userId?: string; contactId?: string }, ack?: (response: SocketAck) => void) => {
+        if (!isValidUuid(contactId)) {
+            acknowledge(ack, { ok: false, error: 'Invalid contact' });
+            return;
+        }
+
+        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+            return;
+        }
+
+        const roomId = getRoomId(userId, contactId);
         socket.join(roomId);
+        acknowledge(ack, { ok: true });
         console.log(`[WS] ${socket.id} joined DM room: ${roomId}`);
     });
 
-    // Broadcast a new direct message to the DM room
-    socket.on('send_message', (message: {
-        id: string;
-        sender_id: string;
-        receiver_id: string;
-        content: string;
-        created_at: string;
-    }) => {
-        const roomId = [message.sender_id, message.receiver_id].sort().join('_');
-        // Broadcast to everyone in the room EXCEPT the sender (sender already has it)
-        socket.to(roomId).emit('new_message', message);
+    socket.on('send_message', async (message: DirectMessage, ack?: (response: SocketAck) => void) => {
+        const persistedMessage = await findPersistedDirectMessage(authedSocket.data.supabase, message, userId);
+        if (!persistedMessage) {
+            acknowledge(ack, { ok: false, error: 'Message is not authorized' });
+            return;
+        }
+
+        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, persistedMessage.receiver_id);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+            return;
+        }
+
+        const roomId = getRoomId(userId, persistedMessage.receiver_id);
+        socket.to(roomId).emit('new_message', persistedMessage);
+        acknowledge(ack, { ok: true });
         console.log(`[WS] Message broadcast to room ${roomId}`);
     });
 
-    // Broadcast a deleted direct message
-    socket.on('delete_message', ({ messageId, userId, contactId }: {
-        messageId: string;
-        userId: string;
-        contactId: string;
-    }) => {
-        const roomId = [userId, contactId].sort().join('_');
+    socket.on('delete_message', async (
+        { messageId, contactId }: { messageId?: string; userId?: string; contactId?: string },
+        ack?: (response: SocketAck) => void,
+    ) => {
+        if (!isValidUuid(messageId) || !isValidUuid(contactId)) {
+            acknowledge(ack, { ok: false, error: 'Invalid delete request' });
+            return;
+        }
+
+        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+            return;
+        }
+
+        const { data, error } = await authedSocket.data.supabase
+            .from('messages')
+            .delete()
+            .eq('id', messageId)
+            .eq('sender_id', userId)
+            .eq('receiver_id', contactId)
+            .select('id')
+            .maybeSingle();
+
+        if (error || !data) {
+            acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
+            return;
+        }
+
+        const roomId = getRoomId(userId, contactId);
         socket.to(roomId).emit('message_deleted', { messageId });
+        acknowledge(ack, { ok: true });
         console.log(`[WS] Delete broadcast to room ${roomId}`);
     });
 
-    // ── GROUP MESSAGES ───────────────────────────────────────
+    socket.on('join_group_room', async ({ groupId }: { groupId?: string }, ack?: (response: SocketAck) => void) => {
+        if (!isValidUuid(groupId)) {
+            acknowledge(ack, { ok: false, error: 'Invalid group' });
+            return;
+        }
 
-    // Join a group discussion room
-    socket.on('join_group_room', ({ groupId }: { groupId: string }) => {
+        const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not a group member' });
+            return;
+        }
+
         socket.join(`group_${groupId}`);
+        acknowledge(ack, { ok: true });
         console.log(`[WS] ${socket.id} joined group room: group_${groupId}`);
     });
 
-    // Broadcast a new group message
-    socket.on('send_group_message', (message: {
-        id: string;
-        sender_id: string;
-        group_id: string;
-        content: string;
-        created_at: string;
-        profiles?: { full_name: string; avatar_url: string };
-    }) => {
-        socket.to(`group_${message.group_id}`).emit('new_group_message', message);
-        console.log(`[WS] Group message broadcast to group_${message.group_id}`);
+    socket.on('send_group_message', async (message: GroupMessage, ack?: (response: SocketAck) => void) => {
+        const persistedMessage = await findPersistedGroupMessage(authedSocket.data.supabase, message, userId);
+        if (!persistedMessage) {
+            acknowledge(ack, { ok: false, error: 'Message is not authorized' });
+            return;
+        }
+
+        const allowed = await isGroupMember(authedSocket.data.supabase, userId, persistedMessage.group_id);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not a group member' });
+            return;
+        }
+
+        socket.to(`group_${persistedMessage.group_id}`).emit('new_group_message', {
+            ...persistedMessage,
+            profiles: message.profiles,
+        });
+        acknowledge(ack, { ok: true });
+        console.log(`[WS] Group message broadcast to group_${persistedMessage.group_id}`);
     });
 
-    // Broadcast a deleted group message
-    socket.on('delete_group_message', ({ messageId, groupId }: {
-        messageId: string;
-        groupId: string;
-    }) => {
+    socket.on('delete_group_message', async (
+        { messageId, groupId }: { messageId?: string; groupId?: string },
+        ack?: (response: SocketAck) => void,
+    ) => {
+        if (!isValidUuid(messageId) || !isValidUuid(groupId)) {
+            acknowledge(ack, { ok: false, error: 'Invalid delete request' });
+            return;
+        }
+
+        const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+        if (!allowed) {
+            acknowledge(ack, { ok: false, error: 'Not a group member' });
+            return;
+        }
+
+        const { data, error } = await authedSocket.data.supabase
+            .from('messages')
+            .delete()
+            .eq('id', messageId)
+            .eq('sender_id', userId)
+            .eq('group_id', groupId)
+            .select('id')
+            .maybeSingle();
+
+        if (error || !data) {
+            acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
+            return;
+        }
+
         socket.to(`group_${groupId}`).emit('group_message_deleted', { messageId });
+        acknowledge(ack, { ok: true });
         console.log(`[WS] Group delete broadcast to group_${groupId}`);
     });
 
@@ -97,8 +385,6 @@ io.on('connection', (socket) => {
         console.log(`[WS] Client disconnected: ${socket.id}`);
     });
 });
-
-// ─────────────────────────────────────────────────────────────
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
