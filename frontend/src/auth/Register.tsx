@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../database/database';
 import { Link, useNavigate } from 'react-router-dom';
+import { getSafeAuthErrorMessage, normalizeEmail, validateEmail, validatePassword } from './authValidation';
 
 export default function Register() {
     const [email, setEmail] = useState('');
@@ -18,6 +19,21 @@ export default function Register() {
         setError('');
         setSuccessMsg('');
 
+        const cleanEmail = normalizeEmail(email);
+        const emailError = validateEmail(cleanEmail);
+        if (emailError) {
+            setError(emailError);
+            setIsLoading(false);
+            return;
+        }
+
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            setError(passwordError);
+            setIsLoading(false);
+            return;
+        }
+
         if (password !== confirmPassword) {
             setError('Passwords do not match');
             setIsLoading(false);
@@ -26,7 +42,7 @@ export default function Register() {
 
         try {
             const { data, error } = await supabase.auth.signUp({
-                email: email.trim(),
+                email: cleanEmail,
                 password,
             });
 
@@ -35,23 +51,21 @@ export default function Register() {
             if (data.user) {
                 const { error: profileError } = await supabase
                     .from('profiles')
-                    .insert([
-                        {
-                            id: data.user.id,
-                            full_name: 'Scholar',
-                        }
-                    ]);
+                    .upsert({
+                        id: data.user.id,
+                        full_name: 'Scholar',
+                    }, { onConflict: 'id' });
 
                 if (profileError) {
-                    console.error("Failed to create user profile:", profileError);
+                    throw profileError;
                 }
             }
 
             // Sign out the auto-created session so user must log in manually
             await supabase.auth.signOut();
-            navigate('/login');
+            navigate('/login', { replace: true });
         } catch (err: any) {
-            setError(err.message || 'Failed to register.');
+            setError(getSafeAuthErrorMessage(err, 'register'));
         } finally {
             setIsLoading(false);
         }
@@ -79,6 +93,10 @@ export default function Register() {
                                     className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
                                     id="email"
                                     type="email"
+                                    autoComplete="email"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
+                                    maxLength={254}
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="student@gmail.com"
@@ -93,6 +111,8 @@ export default function Register() {
                                         className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
                                         id="password"
                                         type={showPassword ? "text" : "password"}
+                                        autoComplete="new-password"
+                                        minLength={8}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="••••••••"
@@ -116,6 +136,8 @@ export default function Register() {
                                     className="w-full px-4 py-4 bg-slate-50 border border-slate-200 focus:border-[#001f3f] focus:ring-0 rounded-md transition-all outline-none text-slate-900"
                                     id="confirm-password"
                                     type="password"
+                                    autoComplete="new-password"
+                                    minLength={8}
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     placeholder="••••••••"

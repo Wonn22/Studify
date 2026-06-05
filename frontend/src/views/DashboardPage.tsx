@@ -29,7 +29,6 @@ const Dashboard = () => {
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
     const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
-    const [weeklyStats, setWeeklyStats] = useState({ thisWeekHours: 0, lastWeekHours: 0, consistencyDays: 0 });
     const [refreshTick, setRefreshTick] = useState(0);
 
     useEffect(() => {
@@ -67,24 +66,6 @@ const Dashboard = () => {
                         .filter((s: any) => s !== null);
 
                     sessionData.sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
-
-                    const now = new Date();
-                    const startOfThisWeek = new Date(now);
-                    startOfThisWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-                    startOfThisWeek.setHours(0, 0, 0, 0);
-                    const startOfLastWeek = new Date(startOfThisWeek);
-                    startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
-
-                    const thisWeekSessions = sessionData.filter((s: any) => {
-                        const d = new Date(s.scheduled_at);
-                        return d >= startOfThisWeek && d <= now;
-                    });
-                    const lastWeekSessions = sessionData.filter((s: any) => {
-                        const d = new Date(s.scheduled_at);
-                        return d >= startOfLastWeek && d < startOfThisWeek;
-                    });
-
-                    // The stats are now pulled directly from the profile table instead of calculating dynamically
 
                     const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
                         const date = new Date(s.scheduled_at);

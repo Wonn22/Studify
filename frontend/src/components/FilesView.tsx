@@ -51,7 +51,7 @@ const FilesView = ({ groupId }: { groupId?: string }) => {
                 uploaded_by: user?.id,
                 file_name: file.name,
                 file_url: publicUrl,
-                file_type: fileExt === 'pdf' ? 'pdf' : fileExt === 'xlsx' ? 'xlsx' : fileExt === 'docx' ? 'docx' : 'link'
+                file_type: fileExt === 'pdf' ? 'pdf' : fileExt === 'xlsx' ? 'xlsx' : fileExt === 'docx' ? 'docx' : 'file'
             });
 
             if (dbError) throw dbError;

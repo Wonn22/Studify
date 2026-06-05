@@ -9,7 +9,7 @@ const GroupsPage = () => {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState("All Groups");
+  const [activeFilter, setActiveFilter] = useState("All Statuses");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -49,22 +49,23 @@ const GroupsPage = () => {
       ];
 
       const formattedGroups = (groupsData || []).map((g, index) => {
-        // Fallbacks in case the SQL wasn't run
-        const category = g.category || g.status || 'Active Research';
+        const status = g.status || 'Active Research';
         const img = g.image_url || fallbackImages[index % fallbackImages.length];
         const members = participantsData.filter((p: any) => p.group_id === g.id).length;
         
+        const description = g.description || '';
         const words = g.name.split(' ');
-        const code = words.length > 1 
-            ? `${words[0].substring(0,3).toUpperCase()}-${Math.floor(Math.random() * 900) + 100}`
-            : `${g.name.substring(0,3).toUpperCase()}-${Math.floor(Math.random() * 900) + 100}`;
+        const fallbackCode = words.length > 1
+          ? `${words[0].substring(0, 3).toUpperCase()}-${Math.floor(Math.random() * 900) + 100}`
+          : `${g.name.substring(0, 3).toUpperCase()}-${Math.floor(Math.random() * 900) + 100}`;
+        const code = description || fallbackCode;
 
         return {
           id: g.id,
           code,
           title: g.name,
           members,
-          category,
+          status,
           img,
           groupUrl: g.group_url
         };
@@ -77,11 +78,11 @@ const GroupsPage = () => {
     fetchGroups();
   }, [navigate]);
 
-  const filteredGroups = activeFilter === "All Groups" 
+  const filteredGroups = activeFilter === "All Statuses"
     ? groups 
-    : groups.filter(g => g.category === activeFilter);
+    : groups.filter(g => g.status === activeFilter);
 
-  const dynamicCategories = ["All Groups", ...Array.from(new Set(groups.map(g => g.category)))];
+  const dynamicStatuses = ["All Statuses", ...Array.from(new Set(groups.map(g => g.status)))];
 
   return (
     <div className="bg-surface text-on-surface min-h-screen font-body flex flex-col">
@@ -107,20 +108,20 @@ const GroupsPage = () => {
               <h3 className="font-headline font-bold text-lg mb-4 text-primary">Filters</h3>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2 block">
-                  Category
+                  Status
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {dynamicCategories.map(cat => (
+                  {dynamicStatuses.map(status => (
                     <button
-                      key={cat as string}
-                      onClick={() => setActiveFilter(cat as string)}
+                      key={status as string}
+                      onClick={() => setActiveFilter(status as string)}
                       className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                        activeFilter === cat 
+                        activeFilter === status
                         ? 'bg-[#001F3F] text-white' 
                         : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
                       }`}
                     >
-                      {cat as string}
+                      {status as string}
                     </button>
                   ))}
                 </div>

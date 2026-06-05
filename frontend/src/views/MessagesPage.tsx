@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../database/database';
 import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
+import { useSocket } from '../context/SocketContext';
 
 interface Profile {
     id: string;
@@ -20,6 +21,7 @@ interface Message {
 
 const MessagesPage = () => {
     const navigate = useNavigate();
+    const { socket } = useSocket();
     const [currentUser, setCurrentUser] = useState<Profile | null>(null);
     const [contacts, setContacts] = useState<Profile[]>([]);
     const [selectedContact, setSelectedContact] = useState<Profile | null>(null);
@@ -27,8 +29,6 @@ const MessagesPage = () => {
     const [resources, setResources] = useState<any[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
-    const [showEmojis, setShowEmojis] = useState(false);
-    const [pendingRequests, setPendingRequests] = useState<Profile[]>([]);
     const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
     const [confirmDeleteResId, setConfirmDeleteResId] = useState<string | null>(null);
     const [confirmRemoveContactId, setConfirmRemoveContactId] = useState<string | null>(null);
@@ -36,6 +36,8 @@ const MessagesPage = () => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const emojis = ['😀', '😂', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '✨', '💯', '🤔'];
+
+    void emojis;
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,7 +69,6 @@ const MessagesPage = () => {
                 f.requester_id === user.id ? f.addressee_id : f.requester_id
             ) || [];
 
-            // Build map: contactId -> friendshipId for DB deletion
             const fMap: Record<string, string> = {};
             friendships?.forEach(f => {
                 const contactId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
@@ -87,28 +88,13 @@ const MessagesPage = () => {
                 }
             }
 
-            const { data: pendingData } = await supabase
-                .from('friendships')
-                .select('requester_id')
-                .eq('addressee_id', user.id)
-                .eq('status', 'Pending');
-            
-            if (pendingData && pendingData.length > 0) {
-                const requesterIds = pendingData.map(p => p.requester_id);
-                const { data: pendingProfiles } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .in('id', requesterIds);
-                setPendingRequests(pendingProfiles || []);
-            }
-
             setLoading(false);
         };
         initialize();
     }, [navigate]);
 
     useEffect(() => {
-        if (!currentUser || !selectedContact) return;
+        if (!currentUser || !selectedContact || !socket) return;
 
         const fetchChatData = async () => {
             const { data: msgs } = await supabase
@@ -130,32 +116,45 @@ const MessagesPage = () => {
 
         fetchChatData();
 
-        const subscription = supabase
-            .channel('messages_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
-                if (payload.eventType === 'INSERT') {
-                    const newMsg = payload.new as Message;
-                    if (newMsg.sender_id === selectedContact.id || newMsg.sender_id === currentUser.id) {
-                        setMessages(prev => [...prev, newMsg]);
-                        setTimeout(scrollToBottom, 100);
-                    }
-                } else if (payload.eventType === 'DELETE') {
-                    setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-                }
-            })
-            .subscribe();
+        socket.emit('join_dm_room', { userId: currentUser.id, contactId: selectedContact.id });
 
-        return () => { supabase.removeChannel(subscription); };
-    }, [currentUser, selectedContact]);
+        const onNewMessage = (msg: Message) => {
+            setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+            });
+            setTimeout(scrollToBottom, 100);
+        };
+
+        const onMessageDeleted = ({ messageId }: { messageId: string }) => {
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+        };
+
+        socket.on('new_message', onNewMessage);
+        socket.on('message_deleted', onMessageDeleted);
+
+        return () => {
+            socket.off('new_message', onNewMessage);
+            socket.off('message_deleted', onMessageDeleted);
+        };
+    }, [currentUser, selectedContact, socket]);
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || !currentUser || !selectedContact) return;
+        const content = newMessage.trim();
+        setNewMessage('');
+
         const { data } = await supabase.from('messages').insert({
             sender_id: currentUser.id,
             receiver_id: selectedContact.id,
-            content: newMessage.trim(),
+            content,
         }).select().single();
-        if (data) setNewMessage('');
+
+        if (data) {
+            setMessages(prev => [...prev, data]);
+            setTimeout(scrollToBottom, 100);
+            socket?.emit('send_message', data);
+        }
     };
 
     const handleDeleteMessage = async (id: string) => {
@@ -172,6 +171,14 @@ const MessagesPage = () => {
 
         setMessages(prev => prev.filter(m => m.id !== id));
         setConfirmDeleteMsgId(null);
+
+        if (currentUser && selectedContact) {
+            socket?.emit('delete_message', {
+                messageId: id,
+                userId: currentUser.id,
+                contactId: selectedContact.id,
+            });
+        }
     };
 
     const handleShareLink = async () => {

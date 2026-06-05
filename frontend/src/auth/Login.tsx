@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../database/database.ts';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { getSafeAuthErrorMessage, normalizeEmail, validateEmail } from './authValidation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -9,36 +10,50 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/dashboard';
 
   useEffect(() => {
     const checkUser = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
-        navigate('/dashboard');
+        navigate(redirectTo, { replace: true });
       }
     };
     checkUser();
-  }, [navigate]);
+  }, [navigate, redirectTo]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
+
+    const cleanEmail = normalizeEmail(email);
+    const emailError = validateEmail(cleanEmail);
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
+
+    if (!password) {
+      setError('Password is required.');
+      return;
+    }
+
+    setIsLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password,
       });
 
       if (error) throw error;
 
       if (data.user) {
-        console.log('Logged in successfully');
-        navigate('/dashboard');
+        navigate(redirectTo, { replace: true });
       }
     } catch (err: any) {
-      setError(err.message || 'Invalid login credentials.');
+      setError(getSafeAuthErrorMessage(err, 'login'));
     } finally {
       setIsLoading(false);
     }
@@ -103,6 +118,8 @@ export default function Login() {
                   id="email"
                   type="email"
                   autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@university.edu"
@@ -120,6 +137,7 @@ export default function Login() {
                   className="w-full border-0 border-b-2 border-slate-200 px-4 py-3 focus:ring-0 focus:border-[#001f3f] transition-all outline-none"
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

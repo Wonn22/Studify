@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../database/database';
 import SideNavBar from '../components/SideNavBar';
@@ -24,6 +24,7 @@ const ProjectWorkspace = () => {
         .eq('id', groupId)
         .single();
 
+      if (error) console.error("Error fetching group:", error);
       if (data) setGroup(data);
 
       const { data: { user } } = await supabase.auth.getUser();
@@ -104,7 +105,7 @@ const ProjectWorkspace = () => {
                 <span className="material-symbols-outlined text-4xl">group</span>
               </div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
-                {group?.category || group?.status || 'Academic Research'}
+                {group?.description || group?.status || 'Academic Research'}
               </p>
               <h1 className="text-3xl font-extrabold tracking-tight text-[#001F3F] mb-4">
                 {group?.name || 'Loading Project...'}
@@ -131,7 +132,7 @@ const ProjectWorkspace = () => {
             <main className="ml-64 flex-1 p-10 bg-surface xl:mr-80 flex flex-col min-h-[calc(100vh-4rem)] h-[calc(100vh-4rem)]">
               <header className="mb-8 shrink-0">
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
-                  {group?.category || group?.status || 'Academic Research'}
+                  {group?.description || group?.status || 'Academic Research'}
                 </p>
                 <h1 className="text-5xl font-extrabold tracking-tighter text-[#001F3F] mb-6">
                   {group?.name || 'Project Alpha'}

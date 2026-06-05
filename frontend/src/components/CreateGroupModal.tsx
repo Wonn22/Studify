@@ -11,7 +11,7 @@ interface CreateGroupModalProps {
 const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps) => {
   const navigate = useNavigate();
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
   const [status, setStatus] = useState('Active Research');
   const [deadline, setDeadline] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,22 +28,13 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const fallbackImages = [
-        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1000&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1577412647305-991150c7d163?q=80&w=1000&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1000&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?q=80&w=1000&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=1000&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=1000&auto=format&fit=crop"
-      ];
       const { data: newGroup, error: groupError } = await supabase
         .from('groups')
         .insert({
-          name,
-          description: category,
+          name: name.trim(),
+          description: description.trim() || null,
           status,
           deadline: deadline || null,
-          group_url: `/groups/${Date.now()}` 
         })
         .select()
         .single();
@@ -105,13 +96,13 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Category / Course Code
+                Description / Course Code
               </label>
               <input
                 type="text"
                 required
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 placeholder="e.g. COMP6048"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#001F3F]/20 focus:border-[#001F3F] transition-all"
               />
@@ -127,9 +118,8 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#001F3F]/20 focus:border-[#001F3F] transition-all"
               >
                 <option value="Active Research">Active Research</option>
-                <option value="Exam Prep">Exam Prep</option>
-                <option value="Project Work">Project Work</option>
-                <option value="General Study">General Study</option>
+                <option value="Completed">Completed</option>
+                <option value="Paused">Paused</option>
               </select>
             </div>
 

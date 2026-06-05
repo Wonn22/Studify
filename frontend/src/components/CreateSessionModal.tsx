@@ -36,7 +36,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Default date/time to now
     useEffect(() => {
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 10);
@@ -64,7 +63,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
 
             const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
 
-            const { error: insertError } = await supabase
+            const { data: newSession, error: insertError } = await supabase
                 .from('sessions')
                 .insert({
                     title: title.trim(),
@@ -75,9 +74,21 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                     max_members: sessionType === 'focus' ? 1 : participants,
                     meeting_link: meetingLink.trim() || null,
                     created_by: user.id,
-                });
+                })
+                .select('id')
+                .single();
 
             if (insertError) throw insertError;
+            if (!newSession) throw new Error('Session was created without returning an id.');
+
+            const { error: participantError } = await supabase
+                .from('session_participants')
+                .upsert({
+                    session_id: newSession.id,
+                    profile_id: user.id,
+                }, { onConflict: 'session_id,profile_id' });
+
+            if (participantError) throw participantError;
 
             onSessionCreated();
             onClose();
@@ -102,7 +113,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative"
                 style={{ animation: 'modalIn 0.22s cubic-bezier(.4,0,.2,1)' }}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between px-7 pt-7 pb-4">
                     <h2 className="text-xl font-bold text-slate-900 font-headline">Start a New Study Session</h2>
                     <button
@@ -115,7 +125,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                 </div>
 
                 <div className="px-7 pb-7 space-y-5">
-                    {/* Subject */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Session Subject</label>
                         <div className="relative">
@@ -132,7 +141,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         </div>
                     </div>
 
-                    {/* Title */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Session Title</label>
                         <input
@@ -144,7 +152,17 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         />
                     </div>
 
-                    {/* Session Type */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
+                        <textarea
+                            rows={3}
+                            placeholder="Add study goals, topics, or preparation notes..."
+                            value={description}
+                            onChange={e => setDescription(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition resize-none"
+                        />
+                    </div>
+
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Session Type</label>
                         <div className="grid grid-cols-2 gap-3">
@@ -183,7 +201,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         </div>
                     </div>
 
-                    {/* Participants — only for collaborative */}
                     {sessionType === 'collaborative' && (
                         <div>
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Participants</label>
@@ -203,7 +220,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         </div>
                     )}
 
-                    {/* Date & Time */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Date</label>
@@ -225,7 +241,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         </div>
                     </div>
 
-                    {/* Duration */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                             Duration — {durationMinutes} min
@@ -244,7 +259,6 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         </div>
                     </div>
 
-                    {/* Meeting Link (optional) */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Meeting Link <span className="normal-case font-normal">(optional)</span></label>
                         <input
@@ -256,12 +270,10 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         />
                     </div>
 
-                    {/* Error */}
                     {error && (
                         <p className="text-red-500 text-xs font-semibold">{error}</p>
                     )}
 
-                    {/* Submit */}
                     <button
                         onClick={handleSubmit}
                         disabled={loading}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../database/database';
+import { useSocket } from '../context/SocketContext';
 
 interface Message {
   id: string;
@@ -13,6 +14,7 @@ interface Message {
 }
 
 const DiscussionView = ({ groupId }: { groupId?: string }) => {
+  const { socket } = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -50,7 +52,6 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
         .order('created_at', { ascending: true });
 
       if (error) {
-        // Fallback if foreign key name is different
         const { data: fallbackData } = await supabase
           .from('messages')
           .select(`
@@ -67,58 +68,51 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
     };
 
     fetchMessages();
+    socket?.emit('join_group_room', { groupId });
 
-    const subscription = supabase
-      .channel(`group_discussion_${groupId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `group_id=eq.${groupId}`
-      }, async (payload) => {
-        // Fetch sender details for the new message
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url')
-          .eq('id', payload.new.sender_id)
-          .single();
+    const onNewGroupMessage = (msg: Message) => {
+      setMessages(prev => {
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+      setTimeout(scrollToBottom, 100);
+    };
 
-        const newMsg = {
-          ...payload.new,
-          profiles: profileData || { full_name: 'Unknown', avatar_url: '' }
-        } as Message;
+    const onGroupMessageDeleted = ({ messageId }: { messageId: string }) => {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    };
 
-        setMessages(prev => [...prev, newMsg]);
-        setTimeout(scrollToBottom, 100);
-      })
-      .on('postgres_changes', {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'messages',
-        filter: `group_id=eq.${groupId}`
-      }, (payload) => {
-        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-      })
-      .subscribe();
+    socket?.on('new_group_message', onNewGroupMessage);
+    socket?.on('group_message_deleted', onGroupMessageDeleted);
 
     return () => {
-      supabase.removeChannel(subscription);
+      socket?.off('new_group_message', onNewGroupMessage);
+      socket?.off('group_message_deleted', onGroupMessageDeleted);
     };
-  }, [groupId]);
+  }, [groupId, socket]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !currentUser || !groupId) return;
 
-    const messageData = {
-      sender_id: currentUser.id,
-      group_id: groupId,
-      content: newMessage.trim(),
-    };
-
+    const content = newMessage.trim();
     setNewMessage('');
     setShowEmojis(false);
-    
-    await supabase.from('messages').insert(messageData);
+
+    const { data } = await supabase.from('messages').insert({
+      sender_id: currentUser.id,
+      group_id: groupId,
+      content,
+    }).select().single();
+
+    if (data) {
+      const msgWithProfile = {
+        ...data,
+        profiles: { full_name: currentUser.user_metadata?.full_name || 'You', avatar_url: currentUser.user_metadata?.avatar_url || '' }
+      } as Message;
+      setMessages(prev => [...prev, msgWithProfile]);
+      setTimeout(scrollToBottom, 100);
+      socket?.emit('send_group_message', msgWithProfile);
+    }
   };
 
   const handleDeleteMessage = async (id: string) => {
@@ -126,6 +120,7 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
     if (!error) {
       setMessages(prev => prev.filter(m => m.id !== id));
       setConfirmDeleteMsgId(null);
+      socket?.emit('delete_group_message', { messageId: id, groupId });
     }
   };
 
@@ -133,23 +128,63 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser || !groupId) return;
 
-    // We simulate file upload to resources here
-    const newResource = {
-        file_name: file.name,
-        file_type: file.name.split('.').pop() || 'unknown',
-        uploaded_by: currentUser.id,
-        group_id: groupId,
-    };
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
+    const fileType = ['pdf', 'xlsx', 'docx'].includes(fileExt) ? fileExt : 'file';
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const filePath = `${groupId}/discussion/${fileName}`;
 
-    await supabase.from('resources').insert(newResource);
+    const { error: uploadError } = await supabase.storage
+      .from('project-files')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      alert(uploadError.message);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('project-files')
+      .getPublicUrl(filePath);
+
+    const { error: resourceError } = await supabase.from('resources').insert({
+      file_name: file.name,
+      file_type: fileType,
+      file_url: publicUrl,
+      uploaded_by: currentUser.id,
+      group_id: groupId,
+    });
+
+    if (resourceError) {
+      alert(resourceError.message);
+      return;
+    }
 
     const messageData = {
-        sender_id: currentUser.id,
-        group_id: groupId,
-        content: `📎 Sent a file: ${file.name}`,
+      sender_id: currentUser.id,
+      group_id: groupId,
+      content: `📎 Sent a file: ${file.name}`,
     };
 
-    await supabase.from('messages').insert(messageData);
+    const { data: insertedMessage } = await supabase
+      .from('messages')
+      .insert(messageData)
+      .select()
+      .single();
+
+    if (insertedMessage) {
+      const msgWithProfile = {
+        ...insertedMessage,
+        profiles: {
+          full_name: currentUser.user_metadata?.full_name || 'You',
+          avatar_url: currentUser.user_metadata?.avatar_url || '',
+        },
+      } as Message;
+      setMessages(prev => [...prev, msgWithProfile]);
+      socket?.emit('send_group_message', msgWithProfile);
+      setTimeout(scrollToBottom, 100);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const formatTime = (isoString: string) => {
@@ -177,7 +212,7 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
             const profile = msg.profiles || { full_name: 'Unknown', avatar_url: '' };
             const avatar = profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(profile.full_name)}`;
             const isConfirming = confirmDeleteMsgId === msg.id;
-            
+
             return (
               <div key={msg.id} className={`flex gap-4 max-w-2xl ${isMe ? 'ml-auto flex-row-reverse' : ''}`}>
                 {!isMe && (
