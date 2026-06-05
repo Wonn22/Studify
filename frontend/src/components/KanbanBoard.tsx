@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
+import { isGroupMember } from '../security/dataAccess';
 
 const KanbanBoard = ({ groupId }: { groupId?: string }) => {
   const [tasks, setTasks] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [canAccess, setCanAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [isAddingColumn, setIsAddingColumn] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
-  const fetchTasks = async () => {
-    if (!groupId) return;
+  const fetchTasks = async (targetGroupId = groupId) => {
+    if (!targetGroupId) return;
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('group_id', groupId);
+      .eq('group_id', targetGroupId);
     
     if (error) {
         console.error("Supabase error:", error);
@@ -22,11 +25,39 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
   };
 
   useEffect(() => {
-    fetchTasks();
+    const initializeBoard = async () => {
+      setCheckingAccess(true);
+      setErrorMsg(null);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const member = await isGroupMember(groupId, user?.id);
+
+      setCanAccess(member);
+      if (member) {
+        await fetchTasks(groupId);
+      } else {
+        setTasks([]);
+        setErrorMsg('You must be a group member to view board tasks.');
+      }
+
+      setCheckingAccess(false);
+    };
+
+    initializeBoard();
   }, [groupId]);
 
   const handleAddTask = async (status: string) => {
-    if (!newTaskTitle.trim() || !groupId) {
+    if (!newTaskTitle.trim() || !groupId || !canAccess) {
+        setIsAddingColumn(null);
+        setNewTaskTitle('');
+        return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const member = await isGroupMember(groupId, user?.id);
+    if (!member) {
+        setCanAccess(false);
+        setErrorMsg('You must be a group member to add tasks.');
         setIsAddingColumn(null);
         setNewTaskTitle('');
         return;
@@ -61,6 +92,11 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
 
   return (
     <div className="mt-8">
+      {checkingAccess && (
+        <div className="bg-slate-50 text-slate-500 p-4 rounded-lg mb-4 text-sm font-bold border border-slate-200">
+          Checking board access...
+        </div>
+      )}
       {errorMsg && (
         <div className="bg-red-50 text-red-500 p-4 rounded-lg mb-4 text-sm font-bold border border-red-200">
           Database Error: {errorMsg} (Did you forget to add the RLS Policy?)

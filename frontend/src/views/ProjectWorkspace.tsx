@@ -6,6 +6,7 @@ import KanbanBoard from '../components/KanbanBoard';
 import ResourceSidebar from '../components/ResourceSidebar';
 import DiscussionView from '../components/DiscussionView';
 import FilesView from '../components/FilesView';
+import { isValidUuid } from '../security/dataAccess';
 
 const ProjectWorkspace = () => {
   const { groupId } = useParams();
@@ -18,28 +19,36 @@ const ProjectWorkspace = () => {
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
+      if (!isValidUuid(groupId)) {
+        setIsMember(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('groups')
         .select('*')
         .eq('id', groupId)
-        .single();
+        .maybeSingle();
 
       if (error) console.error("Error fetching group:", error);
       if (data) setGroup(data);
 
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
       setCurrentUser(user);
 
-      if (user) {
-        const { data: membership } = await supabase
-          .from('group_participants')
-          .select('*')
-          .eq('group_id', groupId)
-          .eq('profile_id', user.id)
-          .single();
+      const { data: membership } = await supabase
+        .from('group_participants')
+        .select('group_id')
+        .eq('group_id', groupId)
+        .eq('profile_id', user.id)
+        .maybeSingle();
 
-        setIsMember(!!membership);
-      }
+      setIsMember(!!membership);
 
       const { count } = await supabase
         .from('group_participants')
@@ -50,18 +59,21 @@ const ProjectWorkspace = () => {
     };
 
     if (groupId) fetchGroupDetails();
-  }, [groupId]);
+  }, [groupId, navigate]);
 
   const handleJoinGroup = async () => {
     if (!currentUser || !groupId) return;
 
     const { error } = await supabase
       .from('group_participants')
-      .insert({
+      .upsert({
         group_id: groupId,
         profile_id: currentUser.id,
         role: 'Member',
         joined_at: new Date().toISOString()
+      }, {
+        onConflict: 'group_id,profile_id',
+        ignoreDuplicates: true
       });
 
     if (!error) {

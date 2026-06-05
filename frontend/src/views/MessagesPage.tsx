@@ -3,6 +3,13 @@ import { supabase } from '../database/database';
 import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
+import {
+    getAcceptedFriendshipId,
+    getProjectFilesStoragePath,
+    getResourceFileType,
+    getUploadValidationError,
+    isHttpUrl,
+} from '../security/dataAccess';
 
 interface Profile {
     id: string;
@@ -35,6 +42,7 @@ const MessagesPage = () => {
     const [friendshipMap, setFriendshipMap] = useState<Record<string, string>>({});
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const selectedFriendshipId = selectedContact ? friendshipMap[selectedContact.id] : null;
     const emojis = ['😀', '😂', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '✨', '💯', '🤔'];
 
     void emojis;
@@ -97,6 +105,14 @@ const MessagesPage = () => {
         if (!currentUser || !selectedContact || !socket) return;
 
         const fetchChatData = async () => {
+            const verifiedFriendshipId = await getAcceptedFriendshipId(currentUser.id, selectedContact.id);
+
+            if (!selectedFriendshipId || verifiedFriendshipId !== selectedFriendshipId) {
+                setMessages([]);
+                setResources([]);
+                return;
+            }
+
             const { data: msgs } = await supabase
                 .from('messages')
                 .select('*')
@@ -119,6 +135,12 @@ const MessagesPage = () => {
         socket.emit('join_dm_room', { userId: currentUser.id, contactId: selectedContact.id });
 
         const onNewMessage = (msg: Message) => {
+            const belongsToSelectedChat =
+                (msg.sender_id === currentUser.id && msg.receiver_id === selectedContact.id) ||
+                (msg.sender_id === selectedContact.id && msg.receiver_id === currentUser.id);
+
+            if (!belongsToSelectedChat) return;
+
             setMessages(prev => {
                 if (prev.some(m => m.id === msg.id)) return prev;
                 return [...prev, msg];
@@ -137,10 +159,16 @@ const MessagesPage = () => {
             socket.off('new_message', onNewMessage);
             socket.off('message_deleted', onMessageDeleted);
         };
-    }, [currentUser, selectedContact, socket]);
+    }, [currentUser, selectedContact, socket, selectedFriendshipId]);
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || !currentUser || !selectedContact) return;
+        const verifiedFriendshipId = await getAcceptedFriendshipId(currentUser.id, selectedContact.id);
+        if (!selectedFriendshipId || verifiedFriendshipId !== selectedFriendshipId) {
+            alert('You can only message accepted contacts.');
+            return;
+        }
+
         const content = newMessage.trim();
         setNewMessage('');
 
@@ -158,10 +186,14 @@ const MessagesPage = () => {
     };
 
     const handleDeleteMessage = async (id: string) => {
+        if (!currentUser || !selectedContact) return;
+
         const { error } = await supabase
             .from('messages')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .eq('sender_id', currentUser.id)
+            .eq('receiver_id', selectedContact.id);
 
         if (error) {
             console.error('Delete error:', error.message, error.code);
@@ -182,17 +214,32 @@ const MessagesPage = () => {
     };
 
     const handleShareLink = async () => {
-        const url = prompt("Enter Academic URL:");
-        const title = prompt("Link Title:");
+        const url = prompt("Enter Academic URL:")?.trim();
+        const title = prompt("Link Title:")?.trim();
         if (!url || !currentUser || !selectedContact) return;
+        if (!isHttpUrl(url)) {
+            alert('Please enter a valid http or https URL.');
+            return;
+        }
 
-        const { data } = await supabase.from('resources').insert({
+        const verifiedFriendshipId = await getAcceptedFriendshipId(currentUser.id, selectedContact.id);
+        if (!selectedFriendshipId || verifiedFriendshipId !== selectedFriendshipId) {
+            alert('You can only share links with accepted contacts.');
+            return;
+        }
+
+        const { data, error: resourceError } = await supabase.from('resources').insert({
             file_name: title || url,
             file_url: url,
             file_type: 'link',
             uploaded_by: currentUser.id,
             receiver_id: selectedContact.id
         }).select().single();
+
+        if (resourceError) {
+            alert(resourceError.message);
+            return;
+        }
 
         if (data) {
             setResources(prev => [data, ...prev]);
@@ -205,17 +252,39 @@ const MessagesPage = () => {
     };
 
     const handleDeleteResource = async (id: string) => {
-        const { error } = await supabase.from('resources').delete().eq('id', id);
+        if (!currentUser || !selectedContact) return;
+        const resource = resources.find(r => r.id === id);
+
+        const { error } = await supabase
+            .from('resources')
+            .delete()
+            .eq('id', id)
+            .eq('uploaded_by', currentUser.id)
+            .eq('receiver_id', selectedContact.id);
+
         if (!error) {
             setResources(prev => prev.filter(r => r.id !== id));
             setConfirmDeleteResId(null);
+
+            const storagePath = getProjectFilesStoragePath(resource?.file_url);
+            if (storagePath) {
+                await supabase.storage.from('project-files').remove([storagePath]);
+            }
         }
     };
 
     const handleRemoveContact = async (contactId: string) => {
+        if (!currentUser) return;
+
         const friendshipId = friendshipMap[contactId];
         if (!friendshipId) return;
-        const { error } = await supabase.from('friendships').delete().eq('id', friendshipId);
+        const { error } = await supabase
+            .from('friendships')
+            .delete()
+            .eq('id', friendshipId)
+            .eq('status', 'Accepted')
+            .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${contactId}),and(requester_id.eq.${contactId},addressee_id.eq.${currentUser.id})`);
+
         if (!error) {
             setContacts(prev => prev.filter(c => c.id !== contactId));
             setFriendshipMap(prev => { const next = { ...prev }; delete next[contactId]; return next; });
@@ -228,7 +297,21 @@ const MessagesPage = () => {
         const file = e.target.files?.[0];
         if (!file || !currentUser || !selectedContact) return;
 
-        const fileExt = file.name.split('.').pop();
+        const uploadValidationError = getUploadValidationError(file);
+        if (uploadValidationError) {
+            alert(uploadValidationError);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
+        const verifiedFriendshipId = await getAcceptedFriendshipId(currentUser.id, selectedContact.id);
+        if (!selectedFriendshipId || verifiedFriendshipId !== selectedFriendshipId) {
+            alert('You can only share files with accepted contacts.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
+        const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const filePath = `direct/${currentUser.id}/${fileName}`;
 
@@ -236,19 +319,30 @@ const MessagesPage = () => {
             .from('project-files')
             .upload(filePath, file);
 
-        if (uploadError) { alert(uploadError.message); return; }
+        if (uploadError) {
+            alert(uploadError.message);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
 
         const { data: { publicUrl } } = supabase.storage
             .from('project-files')
             .getPublicUrl(filePath);
 
-        const { data } = await supabase.from('resources').insert({
+        const { data, error: resourceError } = await supabase.from('resources').insert({
             file_name: file.name,
             file_url: publicUrl,
-            file_type: fileExt === 'pdf' ? 'pdf' : fileExt === 'xlsx' ? 'xlsx' : fileExt === 'docx' ? 'docx' : 'file',
+            file_type: getResourceFileType(file.name),
             uploaded_by: currentUser.id,
             receiver_id: selectedContact.id
         }).select().single();
+
+        if (resourceError) {
+            await supabase.storage.from('project-files').remove([filePath]);
+            alert(resourceError.message);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
 
         if (data) {
             setResources(prev => [data, ...prev]);
@@ -273,7 +367,6 @@ const MessagesPage = () => {
         <div className="bg-surface text-on-surface font-body flex flex-col h-screen overflow-hidden">
             <Navbar />
             <div className="flex flex-1 pt-20 overflow-hidden">
-                {/* CONTACT SIDEBAR */}
                 <section className="w-80 border-r border-slate-200 bg-slate-50 overflow-y-auto p-6">
                     <h2 className="text-xs font-bold tracking-widest text-slate-500 uppercase mb-6">Active Correspondence</h2>
                     <div className="space-y-3">
@@ -318,7 +411,6 @@ const MessagesPage = () => {
                     </div>
                 </section>
 
-                {/* CHAT AREA */}
                 {selectedContact ? (
                     <section className="flex-1 flex flex-col bg-white overflow-hidden">
                         <div className="h-20 px-8 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -390,7 +482,6 @@ const MessagesPage = () => {
                     <div className="flex-1 flex items-center justify-center text-slate-400">Select a contact to start.</div>
                 )}
 
-                {/* FILE SIDEBAR */}
                 {selectedContact && (
                     <section className="w-72 border-l border-slate-200 p-8 hidden xl:block overflow-y-auto">
                         <h4 className="text-[10px] font-bold tracking-widest text-slate-400 uppercase mb-6">Shared Resources</h4>

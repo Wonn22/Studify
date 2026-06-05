@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../database/database';
 import { useSocket } from '../context/SocketContext';
+import { getResourceFileType, getUploadValidationError, isGroupMember } from '../security/dataAccess';
 
 interface Message {
   id: string;
@@ -18,6 +19,8 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [canAccess, setCanAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [showEmojis, setShowEmojis] = useState(false);
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,16 +33,19 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
 
   useEffect(() => {
     const initUser = async () => {
+      setCheckingAccess(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUser(user);
-      }
+      const member = await isGroupMember(groupId, user?.id);
+
+      setCurrentUser(user);
+      setCanAccess(member);
+      setCheckingAccess(false);
     };
     initUser();
-  }, []);
+  }, [groupId]);
 
   useEffect(() => {
-    if (!groupId) return;
+    if (!groupId || !currentUser || !canAccess) return;
 
     const fetchMessages = async () => {
       const { data, error } = await supabase
@@ -89,10 +95,16 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
       socket?.off('new_group_message', onNewGroupMessage);
       socket?.off('group_message_deleted', onGroupMessageDeleted);
     };
-  }, [groupId, socket]);
+  }, [groupId, socket, currentUser, canAccess]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || !groupId) return;
+    if (!newMessage.trim() || !currentUser || !groupId || !canAccess) return;
+
+    const member = await isGroupMember(groupId, currentUser.id);
+    if (!member) {
+      setCanAccess(false);
+      return;
+    }
 
     const content = newMessage.trim();
     setNewMessage('');
@@ -116,7 +128,15 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
   };
 
   const handleDeleteMessage = async (id: string) => {
-    const { error } = await supabase.from('messages').delete().eq('id', id);
+    if (!currentUser || !groupId) return;
+
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', id)
+      .eq('sender_id', currentUser.id)
+      .eq('group_id', groupId);
+
     if (!error) {
       setMessages(prev => prev.filter(m => m.id !== id));
       setConfirmDeleteMsgId(null);
@@ -126,10 +146,23 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !currentUser || !groupId) return;
+    if (!file || !currentUser || !groupId || !canAccess) return;
+
+    const uploadValidationError = getUploadValidationError(file);
+    if (uploadValidationError) {
+      alert(uploadValidationError);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const member = await isGroupMember(groupId, currentUser.id);
+    if (!member) {
+      setCanAccess(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
-    const fileType = ['pdf', 'xlsx', 'docx'].includes(fileExt) ? fileExt : 'file';
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
     const filePath = `${groupId}/discussion/${fileName}`;
 
@@ -139,6 +172,7 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
 
     if (uploadError) {
       alert(uploadError.message);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -148,14 +182,16 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
 
     const { error: resourceError } = await supabase.from('resources').insert({
       file_name: file.name,
-      file_type: fileType,
+      file_type: getResourceFileType(file.name),
       file_url: publicUrl,
       uploaded_by: currentUser.id,
       group_id: groupId,
     });
 
     if (resourceError) {
+      await supabase.storage.from('project-files').remove([filePath]);
       alert(resourceError.message);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -190,6 +226,14 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  if (!checkingAccess && !canAccess) {
+    return (
+      <div className="flex-1 bg-white border border-slate-200 rounded-2xl flex items-center justify-center shadow-sm mt-4 p-10">
+        <p className="text-sm text-slate-400 font-medium">Join this group to view the discussion.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col overflow-hidden shadow-sm mt-4">

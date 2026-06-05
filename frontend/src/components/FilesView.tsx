@@ -1,26 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../database/database';
+import {
+    getProjectFilesStoragePath,
+    getResourceFileType,
+    getUploadValidationError,
+    isGroupMember,
+} from '../security/dataAccess';
 
 const FilesView = ({ groupId }: { groupId?: string }) => {
     const [uploading, setUploading] = useState(false);
     const [files, setFiles] = useState<any[]>([]);
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [canAccess, setCanAccess] = useState(false);
+    const [checkingAccess, setCheckingAccess] = useState(true);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
         const initUser = async () => {
+            setCheckingAccess(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) setCurrentUser(user);
+            const member = await isGroupMember(groupId, user?.id);
+
+            setCurrentUser(user);
+            setCanAccess(member);
+            if (member) {
+                await fetchFiles(groupId);
+            } else {
+                setFiles([]);
+            }
+            setCheckingAccess(false);
         };
         initUser();
-        fetchFiles();
     }, [groupId]);
 
-    const fetchFiles = async () => {
+    const fetchFiles = async (targetGroupId = groupId) => {
+        if (!targetGroupId) return;
+
         const { data } = await supabase
             .from('resources')
             .select('*')
-            .eq('group_id', groupId)
+            .eq('group_id', targetGroupId)
             .order('created_at', { ascending: false });
         if (data) setFiles(data);
     };
@@ -28,10 +47,19 @@ const FilesView = ({ groupId }: { groupId?: string }) => {
     const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         try {
             setUploading(true);
-            if (!event.target.files || event.target.files.length === 0) return;
+            if (!event.target.files || event.target.files.length === 0 || !currentUser || !groupId || !canAccess) return;
 
             const file = event.target.files[0];
-            const fileExt = file.name.split('.').pop();
+            const uploadValidationError = getUploadValidationError(file);
+            if (uploadValidationError) throw new Error(uploadValidationError);
+
+            const member = await isGroupMember(groupId, currentUser.id);
+            if (!member) {
+                setCanAccess(false);
+                throw new Error('You must be a group member to upload files.');
+            }
+
+            const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
             const fileName = `${Math.random()}.${fileExt}`;
             const filePath = `${groupId}/${fileName}`;
 
@@ -45,42 +73,56 @@ const FilesView = ({ groupId }: { groupId?: string }) => {
                 .from('project-files')
                 .getPublicUrl(filePath);
 
-            const { data: { user } } = await supabase.auth.getUser();
             const { error: dbError } = await supabase.from('resources').insert({
                 group_id: groupId,
-                uploaded_by: user?.id,
+                uploaded_by: currentUser.id,
                 file_name: file.name,
                 file_url: publicUrl,
-                file_type: fileExt === 'pdf' ? 'pdf' : fileExt === 'xlsx' ? 'xlsx' : fileExt === 'docx' ? 'docx' : 'file'
+                file_type: getResourceFileType(file.name)
             });
 
-            if (dbError) throw dbError;
+            if (dbError) {
+                await supabase.storage.from('project-files').remove([filePath]);
+                throw dbError;
+            }
 
-            fetchFiles();
+            await fetchFiles(groupId);
         } catch (error: any) {
             alert(error.message);
         } finally {
             setUploading(false);
+            event.target.value = '';
         }
     };
 
     const handleDeleteFile = async (file: any) => {
-        // Best-effort: remove from storage using path extracted from URL
-        if (file.file_url) {
-            try {
-                const url = new URL(file.file_url);
-                const pathParts = url.pathname.split('/project-files/');
-                if (pathParts.length > 1) {
-                    await supabase.storage.from('project-files').remove([decodeURIComponent(pathParts[1])]);
-                }
-            } catch (_) { /* ignore storage errors */ }
-        }
-        const { error } = await supabase.from('resources').delete().eq('id', file.id);
+        if (!currentUser || !groupId || file.uploaded_by !== currentUser.id) return;
+
+        const { error } = await supabase
+            .from('resources')
+            .delete()
+            .eq('id', file.id)
+            .eq('uploaded_by', currentUser.id)
+            .eq('group_id', groupId);
+
         if (!error) {
             setFiles(prev => prev.filter(f => f.id !== file.id));
             setConfirmDeleteId(null);
+
+            const storagePath = getProjectFilesStoragePath(file.file_url);
+            if (storagePath) {
+                await supabase.storage.from('project-files').remove([storagePath]);
+            }
         }
     };
+
+    if (!checkingAccess && !canAccess) {
+        return (
+            <div className="flex-1 flex items-center justify-center mt-4 bg-white border border-slate-200 rounded-2xl p-10">
+                <p className="text-sm text-slate-400 font-medium">Join this group to view shared files.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 flex flex-col gap-6 mt-4 overflow-hidden">

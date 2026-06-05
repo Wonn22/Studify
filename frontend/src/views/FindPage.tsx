@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
+import { isValidUuid } from '../security/dataAccess';
 
 interface Profile {
   id: string;
@@ -70,6 +71,28 @@ const FindPage = () => {
 
   const handleRequestMatch = async (profileId: string) => {
     if (!currentUser) return;
+    if (!isValidUuid(profileId) || profileId === currentUser.id) return;
+
+    const { data: existingFriendship, error: lookupError } = await supabase
+      .from('friendships')
+      .select('id, requester_id, status')
+      .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${currentUser.id})`)
+      .limit(1)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error('Error checking existing match:', lookupError);
+      return;
+    }
+
+    if (existingFriendship) {
+      setProfiles(prev => prev.map(p => p.id === profileId ? {
+        ...p,
+        friendship_status: existingFriendship.status,
+        is_requester: existingFriendship.requester_id === currentUser.id
+      } : p));
+      return;
+    }
     
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Pending', is_requester: true } : p));
 
@@ -89,6 +112,7 @@ const FindPage = () => {
 
   const handleAcceptMatch = async (profileId: string) => {
     if (!currentUser) return;
+    if (!isValidUuid(profileId) || profileId === currentUser.id) return;
     
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Accepted' } : p));
 
@@ -96,7 +120,8 @@ const FindPage = () => {
       .from('friendships')
       .update({ status: 'Accepted' })
       .eq('addressee_id', currentUser.id)
-      .eq('requester_id', profileId);
+      .eq('requester_id', profileId)
+      .eq('status', 'Pending');
 
     if (error) {
       console.error('Error accepting match:', error);
