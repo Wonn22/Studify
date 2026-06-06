@@ -47,11 +47,13 @@
 - [x] **P5-B** — TypeScript cleanup: created `frontend/src/types/index.ts`, removed `any` from 6 files
 - [x] **P5-C** — Error handling: fixed empty catch blocks, replaced silent swallow with user-facing alerts
 
+### P6 — Backend Hardening
+- [x] **P6-A** — Backend error handling: wrap all Socket.IO handlers in `try/catch` via `wrapAsync()`, Express global error middleware, graceful shutdown (`SIGTERM`/`SIGINT`)
+- [x] **P6-B** — Backend security: fix `send_group_message` profile spoofing (server-side profile fetch), rate limiting (30 msg/min per user), strip all backend `console.log/error`
+
 ---
 
 ## 🚧 In Progress / Planned
-
-### P6-A — Backend Error Handling
 **Problem:** All Socket.IO async handlers lack top-level try/catch.
 - Wrap `io.use` middleware auth check in try/catch.
 - Wrap all `socket.on` handlers in try/catch with proper `ack({ success: false, error: ... })`.
