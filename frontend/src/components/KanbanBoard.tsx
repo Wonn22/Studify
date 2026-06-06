@@ -114,6 +114,36 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
     initializeBoard();
   }, [groupId]);
 
+  useEffect(() => {
+    if (!groupId || !canAccess) return;
+
+    const channel = supabase
+      .channel(`tasks-group-${groupId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks', filter: `group_id=eq.${groupId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setTasks(prev => {
+              if (prev.some(t => t.id === payload.new.id)) return prev;
+              return [...prev, payload.new as Task];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setTasks(prev =>
+              prev.map(t => (t.id === payload.new.id ? { ...t, ...(payload.new as Task) } : t))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId, canAccess]);
+
   const handleAddTask = async (status: string) => {
     if (!newTaskTitle.trim() || !groupId || !canAccess) {
       setIsAddingColumn(null);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../database/database';
 import DiscoveryRoomCard from '../components/DiscoveryRoomCard';
-import { getCurrentSessionUser } from '../security/dataAccess';
+import { getCurrentSessionUser, createNotification } from '../security/dataAccess';
 
 export interface SessionJoinRequest {
     id: string;
@@ -17,6 +17,7 @@ const BrowseSessions = () => {
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<any[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [currentUserName, setCurrentUserName] = useState<string>('');
     const [sessionRequests, setSessionRequests] = useState<Record<string, SessionJoinRequest[]>>({});
     const [busyAction, setBusyAction] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ const BrowseSessions = () => {
             }
 
             setCurrentUserId(user.id);
+            setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
 
             const { data, error } = await supabase
                 .from('sessions')
@@ -91,6 +93,25 @@ const BrowseSessions = () => {
         fetchSessions();
     }, [fetchSessions]);
 
+    useEffect(() => {
+        if (!currentUserId) return;
+
+        const channel = supabase
+            .channel('session-join-requests-realtime')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'session_join_requests' },
+                () => {
+                    fetchSessions();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [currentUserId, fetchSessions]);
+
     const handleRequestJoin = async (session: any) => {
         if (!currentUserId) {
             navigate('/login');
@@ -117,6 +138,13 @@ const BrowseSessions = () => {
             if (error) {
                 throw error;
             }
+            await createNotification({
+                recipient_id: session.created_by,
+                sender_id: currentUserId,
+                type: 'session_join_request',
+                reference_id: session.id,
+                message: `${currentUserName} requested to join "${session.title}"`,
+            });
             await fetchSessions();
         } catch (err: any) {
             alert(err.message || 'Failed to request this session.');
@@ -156,6 +184,13 @@ const BrowseSessions = () => {
             if (updateError) {
                 throw updateError;
             }
+            await createNotification({
+                recipient_id: request.requesterId,
+                sender_id: currentUserId,
+                type: 'session_join_accepted',
+                reference_id: session.id,
+                message: `Your request to join "${session.title}" was accepted`,
+            });
             await fetchSessions();
         } catch (err: any) {
             alert(err.message || 'Failed to accept request.');
@@ -178,6 +213,13 @@ const BrowseSessions = () => {
             if (error) {
                 throw error;
             }
+            await createNotification({
+                recipient_id: request.requesterId,
+                sender_id: currentUserId,
+                type: 'session_join_rejected',
+                reference_id: request.sessionId,
+                message: `Your request to join the session was rejected`,
+            });
             await fetchSessions();
         } catch (err: any) {
             alert(err.message || 'Failed to reject request.');

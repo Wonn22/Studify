@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   acceptFriendRequest,
   cancelFriendRequest,
+  createNotification,
   type FriendshipStatus,
 } from '../security/dataAccess';
 
@@ -35,90 +36,114 @@ const getAvatar = (url?: string | null, name?: string) =>
 const ConnectionsPage = () => {
   const navigate = useNavigate();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [friends, setFriends] = useState<ConnectionItem[]>([]);
   const [pendingIncoming, setPendingIncoming] = useState<ConnectionItem[]>([]);
   const [pendingOutgoing, setPendingOutgoing] = useState<ConnectionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchConnections = async () => {
-      try {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          navigate('/login');
-          return;
-        }
-        setCurrentUserId(user.id);
+  const fetchConnections = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+      setCurrentUserId(user.id);
+      setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
 
-        const { data: rows } = await supabase
-          .from('friendships')
-          .select('id, status, requester_id, addressee_id')
-          .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-          .in('status', ['Accepted', 'Pending']);
+      const { data: rows } = await supabase
+        .from('friendships')
+        .select('id, status, requester_id, addressee_id')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+        .in('status', ['Accepted', 'Pending']);
 
-        if (!rows || rows.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        const profileIds = new Set<string>();
-        rows.forEach((r: FriendshipRow) => {
-          profileIds.add(r.requester_id);
-          profileIds.add(r.addressee_id);
-        });
-        profileIds.delete(user.id);
-
-        let profileMap = new Map<string, Profile>();
-        if (profileIds.size > 0) {
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_url, major')
-            .in('id', Array.from(profileIds));
-
-          profilesData?.forEach((p: Profile) => profileMap.set(p.id, p));
-        }
-
-        const accepted: ConnectionItem[] = [];
-        const incoming: ConnectionItem[] = [];
-        const outgoing: ConnectionItem[] = [];
-
-        rows.forEach((row: FriendshipRow) => {
-          const otherId = row.requester_id === user.id ? row.addressee_id : row.requester_id;
-          const profile = profileMap.get(otherId);
-          if (!profile) return;
-
-          const item: ConnectionItem = {
-            friendshipId: row.id,
-            status: row.status,
-            profile,
-            direction:
-              row.status === 'Accepted'
-                ? 'friend'
-                : row.requester_id === user.id
-                  ? 'outgoing'
-                  : 'incoming',
-          };
-
-          if (item.direction === 'friend') accepted.push(item);
-          else if (item.direction === 'incoming') incoming.push(item);
-          else outgoing.push(item);
-        });
-
-        setFriends(accepted);
-        setPendingIncoming(incoming);
-        setPendingOutgoing(outgoing);
-      } catch {
+      if (!rows || rows.length === 0) {
         setFriends([]);
         setPendingIncoming([]);
         setPendingOutgoing([]);
-      } finally {
         setLoading(false);
+        return;
       }
-    };
 
+      const profileIds = new Set<string>();
+      rows.forEach((r: FriendshipRow) => {
+        profileIds.add(r.requester_id);
+        profileIds.add(r.addressee_id);
+      });
+      profileIds.delete(user.id);
+
+      let profileMap = new Map<string, Profile>();
+      if (profileIds.size > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, major')
+          .in('id', Array.from(profileIds));
+
+        profilesData?.forEach((p: Profile) => profileMap.set(p.id, p));
+      }
+
+      const accepted: ConnectionItem[] = [];
+      const incoming: ConnectionItem[] = [];
+      const outgoing: ConnectionItem[] = [];
+
+      rows.forEach((row: FriendshipRow) => {
+        const otherId = row.requester_id === user.id ? row.addressee_id : row.requester_id;
+        const profile = profileMap.get(otherId);
+        if (!profile) return;
+
+        const item: ConnectionItem = {
+          friendshipId: row.id,
+          status: row.status,
+          profile,
+          direction:
+            row.status === 'Accepted'
+              ? 'friend'
+              : row.requester_id === user.id
+                ? 'outgoing'
+                : 'incoming',
+        };
+
+        if (item.direction === 'friend') accepted.push(item);
+        else if (item.direction === 'incoming') incoming.push(item);
+        else outgoing.push(item);
+      });
+
+      setFriends(accepted);
+      setPendingIncoming(incoming);
+      setPendingOutgoing(outgoing);
+    } catch {
+      setFriends([]);
+      setPendingIncoming([]);
+      setPendingOutgoing([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchConnections();
   }, [navigate]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel('friendships-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friendships' },
+        () => {
+          fetchConnections();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
 
   const handleAccept = async (item: ConnectionItem) => {
     if (!currentUserId) return;
@@ -129,6 +154,13 @@ const ConnectionsPage = () => {
     if (error) {
       setFriends(prev => prev.filter(p => p.friendshipId !== item.friendshipId));
       setPendingIncoming(prev => [...prev, item]);
+    } else {
+      await createNotification({
+        recipient_id: item.profile.id,
+        sender_id: currentUserId,
+        type: 'friend_accepted',
+        message: `${currentUserName} accepted your friend request`,
+      });
     }
   };
 
