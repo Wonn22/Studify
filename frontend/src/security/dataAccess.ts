@@ -109,6 +109,88 @@ export const getAcceptedFriendshipId = async (
   return data?.id ?? null;
 };
 
+export interface FriendshipStatus {
+  status: 'Pending' | 'Accepted' | 'Declined' | 'Blocked' | null;
+  isRequester: boolean;
+}
+
+export const getFriendshipStatus = async (
+  currentUserId?: string | null,
+  profileId?: string | null,
+): Promise<FriendshipStatus | null> => {
+  if (!isValidUuid(currentUserId) || !isValidUuid(profileId) || currentUserId === profileId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('status, requester_id')
+    .or(
+      `and(requester_id.eq.${currentUserId},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${currentUserId})`,
+    )
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return null;
+  }
+
+  if (!data) {
+    return { status: null, isRequester: false };
+  }
+
+  return {
+    status: data.status as FriendshipStatus['status'],
+    isRequester: data.requester_id === currentUserId,
+  };
+};
+
+export const sendFriendRequest = async (
+  currentUserId?: string | null,
+  profileId?: string | null,
+) => {
+  if (!isValidUuid(currentUserId) || !isValidUuid(profileId) || currentUserId === profileId) {
+    return { error: new Error('Invalid request') };
+  }
+
+  const { data: existing } = await supabase
+    .from('friendships')
+    .select('id, status')
+    .or(
+      `and(requester_id.eq.${currentUserId},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${currentUserId})`,
+    )
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    return { error: new Error('Friendship already exists') };
+  }
+
+  return supabase
+    .from('friendships')
+    .insert({
+      requester_id: currentUserId,
+      addressee_id: profileId,
+      status: 'Pending',
+    });
+};
+
+export const acceptFriendRequest = async (
+  currentUserId?: string | null,
+  profileId?: string | null,
+) => {
+  if (!isValidUuid(currentUserId) || !isValidUuid(profileId) || currentUserId === profileId) {
+    return { error: new Error('Invalid request') };
+  }
+
+  return supabase
+    .from('friendships')
+    .update({ status: 'Accepted' })
+    .eq('addressee_id', currentUserId)
+    .eq('requester_id', profileId)
+    .eq('status', 'Pending');
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 

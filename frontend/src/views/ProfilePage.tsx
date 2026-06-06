@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../database/database';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, type FriendshipStatus } from '../security/dataAccess';
 
 interface UserProfile {
     id: string;
@@ -299,11 +300,16 @@ const ShareModal = ({ profile, onClose }: { profile: UserProfile; onClose: () =>
 };
 
 const ProfilePage = () => {
+    const { id } = useParams<{ id?: string }>();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [showEdit, setShowEdit] = useState(false);
     const [showShare, setShowShare] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
+    const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus['status']>(null);
+    const [isRequester, setIsRequester] = useState(false);
+    const [isOwnProfile, setIsOwnProfile] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -317,29 +323,73 @@ const ProfilePage = () => {
                     return;
                 }
 
+                setCurrentUserId(user.id);
+                const profileId = id || user.id;
+                const own = profileId === user.id;
+                setIsOwnProfile(own);
+
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
-                    .eq('id', user.id)
+                    .eq('id', profileId)
                     .single();
 
-                if (error) throw error;
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        navigate('/dashboard');
+                        return;
+                    }
+                    throw error;
+                }
                 setProfile(data);
-            } catch (error) {
-                console.error('Error fetching profile:', error);
+
+                if (!own) {
+                    const status = await getFriendshipStatus(user.id, profileId);
+                    if (status) {
+                        setFriendshipStatus(status.status);
+                        setIsRequester(status.isRequester);
+                    }
+                }
+            } catch {
+                setToast('Failed to load profile');
+                setTimeout(() => setToast(null), 3000);
             } finally {
                 setLoading(false);
             }
         };
 
         getProfile();
-    }, [navigate]);
+    }, [navigate, id]);
 
     const handleSaved = (updated: UserProfile) => {
         setProfile(updated);
         setShowEdit(false);
         setToast('Profile updated!');
         setTimeout(() => setToast(null), 3000);
+    };
+
+    const handleSendRequest = async () => {
+        if (!currentUserId || !profile || isOwnProfile) return;
+        setFriendshipStatus('Pending');
+        setIsRequester(true);
+        const { error } = await sendFriendRequest(currentUserId, profile.id);
+        if (error) {
+            setFriendshipStatus(null);
+            setIsRequester(false);
+            setToast('Failed to send request');
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
+
+    const handleAcceptRequest = async () => {
+        if (!currentUserId || !profile || isOwnProfile) return;
+        setFriendshipStatus('Accepted');
+        const { error } = await acceptFriendRequest(currentUserId, profile.id);
+        if (error) {
+            setFriendshipStatus('Pending');
+            setToast('Failed to accept request');
+            setTimeout(() => setToast(null), 3000);
+        }
     };
 
     if (loading) return (
@@ -399,12 +449,39 @@ const ProfilePage = () => {
                         <p className="text-secondary font-medium mb-8">{profile?.major || 'Undecided Major'}</p>
 
                         <div className="w-full space-y-4 pt-8 border-t border-slate-200">
-                            <button onClick={() => setShowEdit(true)} className="w-full bg-primary-container text-white py-3 rounded-lg font-semibold hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2">
-                                <span className="material-symbols-outlined text-lg">edit</span> Edit Profile
-                            </button>
-                            <button onClick={() => setShowShare(true)} className="w-full border-2 border-primary-container text-primary-container py-3 rounded-lg font-semibold hover:bg-primary-container hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
-                                <span className="material-symbols-outlined text-lg">share</span> Share Portfolio
-                            </button>
+                            {isOwnProfile ? (
+                                <>
+                                    <button onClick={() => setShowEdit(true)} className="w-full bg-primary-container text-white py-3 rounded-lg font-semibold hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">edit</span> Edit Profile
+                                    </button>
+                                    <button onClick={() => setShowShare(true)} className="w-full border-2 border-primary-container text-primary-container py-3 rounded-lg font-semibold hover:bg-primary-container hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">share</span> Share Portfolio
+                                    </button>
+                                </>
+                            ) : friendshipStatus === 'Pending' ? (
+                                isRequester ? (
+                                    <button disabled className="w-full bg-slate-200 text-slate-500 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 cursor-not-allowed">
+                                        <span className="material-symbols-outlined text-lg">schedule</span> Request Pending
+                                    </button>
+                                ) : (
+                                    <button onClick={handleAcceptRequest} className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">check_circle</span> Accept Request
+                                    </button>
+                                )
+                            ) : friendshipStatus === 'Accepted' ? (
+                                <button onClick={() => navigate('/messages')} className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <span className="material-symbols-outlined text-lg">chat</span> Message
+                                </button>
+                            ) : (
+                                <button onClick={handleSendRequest} className="w-full bg-primary-container text-white py-3 rounded-lg font-semibold hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <span className="material-symbols-outlined text-lg">person_add</span> Add Friend
+                                </button>
+                            )}
+                            {!isOwnProfile && (
+                                <button onClick={() => setShowShare(true)} className="w-full border-2 border-primary-container text-primary-container py-3 rounded-lg font-semibold hover:bg-primary-container hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <span className="material-symbols-outlined text-lg">share</span> Share Portfolio
+                                </button>
+                            )}
                         </div>
 
                         <div className="mt-auto pt-12 space-y-3 w-full">

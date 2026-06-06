@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
-import { isValidUuid } from '../security/dataAccess';
+import { isValidUuid, sendFriendRequest, acceptFriendRequest } from '../security/dataAccess';
 
 interface Profile {
   id: string;
@@ -73,39 +73,11 @@ const FindPage = () => {
     if (!currentUser) return;
     if (!isValidUuid(profileId) || profileId === currentUser.id) return;
 
-    const { data: existingFriendship, error: lookupError } = await supabase
-      .from('friendships')
-      .select('id, requester_id, status')
-      .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${currentUser.id})`)
-      .limit(1)
-      .maybeSingle();
-
-    if (lookupError) {
-      console.error('Error checking existing match:', lookupError);
-      return;
-    }
-
-    if (existingFriendship) {
-      setProfiles(prev => prev.map(p => p.id === profileId ? {
-        ...p,
-        friendship_status: existingFriendship.status,
-        is_requester: existingFriendship.requester_id === currentUser.id
-      } : p));
-      return;
-    }
-    
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Pending', is_requester: true } : p));
 
-    const { error } = await supabase
-      .from('friendships')
-      .insert({
-        requester_id: currentUser.id,
-        addressee_id: profileId,
-        status: 'Pending'
-      });
+    const { error } = await sendFriendRequest(currentUser.id, profileId);
 
     if (error) {
-      console.error('Error requesting match:', error);
       setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: null } : p));
     }
   };
@@ -113,18 +85,12 @@ const FindPage = () => {
   const handleAcceptMatch = async (profileId: string) => {
     if (!currentUser) return;
     if (!isValidUuid(profileId) || profileId === currentUser.id) return;
-    
+
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Accepted' } : p));
 
-    const { error } = await supabase
-      .from('friendships')
-      .update({ status: 'Accepted' })
-      .eq('addressee_id', currentUser.id)
-      .eq('requester_id', profileId)
-      .eq('status', 'Pending');
+    const { error } = await acceptFriendRequest(currentUser.id, profileId);
 
     if (error) {
-      console.error('Error accepting match:', error);
       setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Pending' } : p));
     }
   };
@@ -195,7 +161,7 @@ const FindPage = () => {
                   />
                 </div>
                 <div className="pl-14 pt-2">
-                  <h3 className="text-xl font-headline font-bold text-primary-container">{profile.full_name}</h3>
+                  <h3 className="text-xl font-headline font-bold text-primary-container cursor-pointer hover:underline" onClick={() => navigate(`/profile/${profile.id}`)}>{profile.full_name}</h3>
                   <p className="font-label text-xs uppercase tracking-wider text-slate-400 mt-1">{profile.major || 'Undeclared'}</p>
                 </div>
                 <div className="mt-8 space-y-4">

@@ -24,6 +24,7 @@ function App() {
             <Route path="/browse-sessions" element={<BrowseSessions />} />
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/match" element={<FindPage />} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:groupId" element={<ProjectWorkspace />} />
