@@ -4,18 +4,20 @@ import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
 import CreateGroupModal from '../components/CreateGroupModal';
+import { getCurrentSessionUser } from '../security/dataAccess';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("All Statuses");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchGroups = async () => {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
+      const user = await getCurrentSessionUser();
+      if (!user) {
         navigate('/login');
         return;
       }
@@ -26,6 +28,7 @@ const GroupsPage = () => {
 
       if (groupsError) {
         console.error("Error fetching groups:", groupsError);
+        setLoadError('Unable to load groups. Check your Supabase connection and refresh the page.');
         setLoading(false);
         return;
       }
@@ -72,6 +75,7 @@ const GroupsPage = () => {
       });
 
       setGroups(formattedGroups);
+      setLoadError(null);
       setLoading(false);
     };
 
@@ -141,6 +145,12 @@ const GroupsPage = () => {
             {loading ? (
                 <div className="flex justify-center items-center h-64">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                </div>
+            ) : loadError ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-red-50 rounded-xl border border-dashed border-red-200">
+                    <span className="material-symbols-outlined text-5xl text-red-300 mb-4">cloud_off</span>
+                    <h3 className="text-xl font-bold text-red-700">Groups unavailable</h3>
+                    <p className="text-red-500 mt-2">{loadError}</p>
                 </div>
             ) : filteredGroups.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-surface-container-lowest rounded-xl border border-dashed border-slate-200">

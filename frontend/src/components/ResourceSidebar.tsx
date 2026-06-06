@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
-import { isGroupMember } from '../security/dataAccess';
+import { getCurrentSessionUser, isGroupMember } from '../security/dataAccess';
 
 const ResourceSidebar = ({ groupId }: { groupId?: string }) => {
   const [resources, setResources] = useState<any[]>([]);
 
   useEffect(() => {
       const fetchResources = async () => {
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = await getCurrentSessionUser();
           const member = await isGroupMember(groupId, user?.id);
           if (!member) {
             setResources([]);

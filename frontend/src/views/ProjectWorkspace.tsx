@@ -6,7 +6,7 @@ import KanbanBoard from '../components/KanbanBoard';
 import ResourceSidebar from '../components/ResourceSidebar';
 import DiscussionView from '../components/DiscussionView';
 import FilesView from '../components/FilesView';
-import { isValidUuid } from '../security/dataAccess';
+import { getCurrentSessionUser, isValidUuid } from '../security/dataAccess';
 
 const ProjectWorkspace = () => {
   const { groupId } = useParams();
@@ -16,11 +16,13 @@ const ProjectWorkspace = () => {
   const [activeTab, setActiveTab] = useState('Board');
   const [isMember, setIsMember] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
       if (!isValidUuid(groupId)) {
         setIsMember(false);
+        setLoadError('Invalid group link.');
         return;
       }
 
@@ -30,10 +32,22 @@ const ProjectWorkspace = () => {
         .eq('id', groupId)
         .maybeSingle();
 
-      if (error) console.error("Error fetching group:", error);
-      if (data) setGroup(data);
+      if (error) {
+        console.error("Error fetching group:", error);
+        setLoadError('Unable to load this group. Check your Supabase connection and try again.');
+        setIsMember(false);
+        return;
+      }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      if (!data) {
+        setLoadError('This group no longer exists or is not available.');
+        setIsMember(false);
+        return;
+      }
+
+      setGroup(data);
+
+      const user = await getCurrentSessionUser();
       if (!user) {
         navigate('/login');
         return;
@@ -41,12 +55,19 @@ const ProjectWorkspace = () => {
 
       setCurrentUser(user);
 
-      const { data: membership } = await supabase
+      const { data: membership, error: membershipError } = await supabase
         .from('group_participants')
         .select('group_id')
         .eq('group_id', groupId)
         .eq('profile_id', user.id)
         .maybeSingle();
+
+      if (membershipError) {
+        console.error("Error checking group membership:", membershipError);
+        setLoadError('Unable to verify your group membership. Try refreshing the page.');
+        setIsMember(false);
+        return;
+      }
 
       setIsMember(!!membership);
 
@@ -78,9 +99,11 @@ const ProjectWorkspace = () => {
 
     if (!error) {
       setIsMember(true);
+      setLoadError(null);
       setParticipantsCount(prev => prev + 1);
     } else {
       console.error("Error joining group:", error);
+      setLoadError(error.message || 'Unable to join this group.');
     }
   };
 
@@ -123,7 +146,7 @@ const ProjectWorkspace = () => {
                 {group?.name || 'Loading Project...'}
               </h1>
               <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-                You need to join this group to access its Kanban board, discussions, and shared academic files.
+                {loadError || 'You need to join this group to access its Kanban board, discussions, and shared academic files.'}
               </p>
               <div className="flex items-center justify-center gap-2 mb-8">
                 <span className="material-symbols-outlined text-slate-400 text-sm">person</span>
@@ -131,9 +154,10 @@ const ProjectWorkspace = () => {
               </div>
               <button
                 onClick={handleJoinGroup}
+                disabled={!!loadError && !group}
                 className="w-full py-4 bg-[#001F3F] text-white font-bold rounded-xl hover:bg-blue-950 transition-colors shadow-sm"
               >
-                Join Group Workspace
+                {loadError && !group ? 'Group Unavailable' : 'Join Group Workspace'}
               </button>
             </div>
           </div>

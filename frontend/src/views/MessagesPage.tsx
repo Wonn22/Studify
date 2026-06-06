@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import {
     getAcceptedFriendshipId,
+    getCurrentSessionUser,
     getProjectFilesStoragePath,
     getResourceFileType,
     getUploadValidationError,
@@ -29,6 +30,12 @@ interface Message {
 interface SocketAck {
     ok: boolean;
     error?: string;
+}
+
+interface FriendshipRow {
+    id: string;
+    requester_id: string;
+    addressee_id: string;
 }
 
 const MessagesPage = () => {
@@ -56,10 +63,25 @@ const MessagesPage = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const removeInvalidContact = (contactId: string) => {
+        setMessages([]);
+        setResources([]);
+        setFriendshipMap(prev => {
+            const next = { ...prev };
+            delete next[contactId];
+            return next;
+        });
+        setContacts(prev => {
+            const next = prev.filter(contact => contact.id !== contactId);
+            setSelectedContact(current => current?.id === contactId ? next[0] || null : current);
+            return next;
+        });
+    };
+
     useEffect(() => {
         const initialize = async () => {
-            const { data: { user }, error } = await supabase.auth.getUser();
-            if (error || !user) {
+            const user = await getCurrentSessionUser();
+            if (!user) {
                 navigate('/login');
                 return;
             }
@@ -78,12 +100,17 @@ const MessagesPage = () => {
                 .eq('status', 'Accepted')
                 .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
 
-            const friendIds = friendships?.map(f =>
+            const acceptedFriendships = (friendships || []).filter((f: FriendshipRow) => {
+                const contactId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
+                return contactId && contactId !== user.id;
+            });
+
+            const friendIds = Array.from(new Set(acceptedFriendships.map(f =>
                 f.requester_id === user.id ? f.addressee_id : f.requester_id
-            ) || [];
+            )));
 
             const fMap: Record<string, string> = {};
-            friendships?.forEach(f => {
+            acceptedFriendships.forEach(f => {
                 const contactId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
                 fMap[contactId] = f.id;
             });
@@ -95,10 +122,18 @@ const MessagesPage = () => {
                     .select('*')
                     .in('id', friendIds);
 
-                if (allContacts && allContacts.length > 0) {
-                    setContacts(allContacts);
-                    setSelectedContact(allContacts[0]);
+                const acceptedContacts = (allContacts || []).filter(contact => fMap[contact.id]);
+
+                if (acceptedContacts.length > 0) {
+                    setContacts(acceptedContacts);
+                    setSelectedContact(acceptedContacts[0]);
+                } else {
+                    setContacts([]);
+                    setSelectedContact(null);
                 }
+            } else {
+                setContacts([]);
+                setSelectedContact(null);
             }
 
             setLoading(false);
@@ -113,8 +148,7 @@ const MessagesPage = () => {
             const verifiedFriendshipId = await getAcceptedFriendshipId(currentUser.id, selectedContact.id);
 
             if (!selectedFriendshipId || verifiedFriendshipId !== selectedFriendshipId) {
-                setMessages([]);
-                setResources([]);
+                removeInvalidContact(selectedContact.id);
                 return;
             }
 
@@ -251,11 +285,22 @@ const MessagesPage = () => {
 
         if (data) {
             setResources(prev => [data, ...prev]);
-            await supabase.from('messages').insert({
+            const { data: insertedMessage, error: messageError } = await supabase.from('messages').insert({
                 sender_id: currentUser.id,
                 receiver_id: selectedContact.id,
                 content: `🔗 Shared a link: ${title || url}`
-            });
+            }).select().single();
+
+            if (messageError) {
+                alert(messageError.message);
+                return;
+            }
+
+            if (insertedMessage) {
+                setMessages(prev => [...prev, insertedMessage]);
+                setTimeout(scrollToBottom, 100);
+                socket?.emit('send_message', insertedMessage);
+            }
         }
     };
 
@@ -354,11 +399,23 @@ const MessagesPage = () => {
 
         if (data) {
             setResources(prev => [data, ...prev]);
-            await supabase.from('messages').insert({
+            const { data: insertedMessage, error: messageError } = await supabase.from('messages').insert({
                 sender_id: currentUser.id,
                 receiver_id: selectedContact.id,
                 content: `📎 Sent a file: ${file.name}`
-            });
+            }).select().single();
+
+            if (messageError) {
+                alert(messageError.message);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
+
+            if (insertedMessage) {
+                setMessages(prev => [...prev, insertedMessage]);
+                setTimeout(scrollToBottom, 100);
+                socket?.emit('send_message', insertedMessage);
+            }
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };

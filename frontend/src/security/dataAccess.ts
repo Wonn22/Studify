@@ -5,7 +5,7 @@ export type ResourceFileType = 'pdf' | 'xlsx' | 'docx' | 'link' | 'file';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const isValidUuid = (value?: string | null) =>
   typeof value === 'string' && UUID_PATTERN.test(value);
@@ -13,6 +13,21 @@ export const isValidUuid = (value?: string | null) =>
 export const getResourceFileType = (fileName?: string | null): ResourceFileType => {
   const ext = fileName?.split('.').pop()?.toLowerCase();
   return ext === 'pdf' || ext === 'xlsx' || ext === 'docx' ? ext : 'file';
+};
+
+export const getCurrentSessionUser = async () => {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Session lookup failed:', error.message);
+      return null;
+    }
+
+    return data.session?.user ?? null;
+  } catch (error) {
+    console.error('Session lookup failed:', error);
+    return null;
+  }
 };
 
 export const getUploadValidationError = (file: File) => {

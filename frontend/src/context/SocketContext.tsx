@@ -15,6 +15,7 @@ export const useSocket = () => useContext(SocketContext);
 
 export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     const socketRef = useRef<Socket | null>(null);
+    const tokenRef = useRef<string | null>(null);
     const [socket, setSocket] = useState<Socket | null>(null);
     const [connected, setConnected] = useState(false);
 
@@ -22,6 +23,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         let isMounted = true;
 
         const disconnectSocket = () => {
+            tokenRef.current = null;
             socketRef.current?.removeAllListeners();
             socketRef.current?.disconnect();
             socketRef.current = null;
@@ -33,7 +35,12 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         const connectSocket = (accessToken: string) => {
+            if (tokenRef.current === accessToken && socketRef.current) {
+                return;
+            }
+
             disconnectSocket();
+            tokenRef.current = accessToken;
 
             const nextSocket = io(SOCKET_URL, {
                 transports: ['websocket'],

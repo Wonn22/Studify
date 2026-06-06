@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../database/database';
 import {
+    getCurrentSessionUser,
     getProjectFilesStoragePath,
     getResourceFileType,
     getUploadValidationError,
@@ -18,7 +19,7 @@ const FilesView = ({ groupId }: { groupId?: string }) => {
     useEffect(() => {
         const initUser = async () => {
             setCheckingAccess(true);
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getCurrentSessionUser();
             const member = await isGroupMember(groupId, user?.id);
 
             setCurrentUser(user);

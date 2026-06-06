@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../database/database';
+import { getCurrentSessionUser } from '../security/dataAccess';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ const Navbar = () => {
 
   useEffect(() => {
     const getUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentSessionUser();
 
       if (user) {
         const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Scholar';

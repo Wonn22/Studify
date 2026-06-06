@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
-import { isGroupMember } from '../security/dataAccess';
+import { getCurrentSessionUser, isGroupMember } from '../security/dataAccess';
 
 const KanbanBoard = ({ groupId }: { groupId?: string }) => {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -29,7 +29,7 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
       setCheckingAccess(true);
       setErrorMsg(null);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentSessionUser();
       const member = await isGroupMember(groupId, user?.id);
 
       setCanAccess(member);
@@ -53,7 +53,7 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
         return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentSessionUser();
     const member = await isGroupMember(groupId, user?.id);
     if (!member) {
         setCanAccess(false);

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../database/database';
 import { useSocket } from '../context/SocketContext';
-import { getResourceFileType, getUploadValidationError, isGroupMember } from '../security/dataAccess';
+import { getCurrentSessionUser, getResourceFileType, getUploadValidationError, isGroupMember } from '../security/dataAccess';
 
 interface Message {
   id: string;
@@ -39,7 +39,7 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
   useEffect(() => {
     const initUser = async () => {
       setCheckingAccess(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentSessionUser();
       const member = await isGroupMember(groupId, user?.id);
 
       setCurrentUser(user);
