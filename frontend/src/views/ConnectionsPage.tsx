@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   acceptFriendRequest,
   cancelFriendRequest,
-  createNotification,
   type FriendshipStatus,
 } from '../security/dataAccess';
 
@@ -36,7 +35,6 @@ const getAvatar = (url?: string | null, name?: string) =>
 const ConnectionsPage = () => {
   const navigate = useNavigate();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [friends, setFriends] = useState<ConnectionItem[]>([]);
   const [pendingIncoming, setPendingIncoming] = useState<ConnectionItem[]>([]);
   const [pendingOutgoing, setPendingOutgoing] = useState<ConnectionItem[]>([]);
@@ -51,7 +49,6 @@ const ConnectionsPage = () => {
         return;
       }
       setCurrentUserId(user.id);
-      setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
 
       const { data: rows } = await supabase
         .from('friendships')
@@ -154,16 +151,6 @@ const ConnectionsPage = () => {
     if (error) {
       setFriends(prev => prev.filter(p => p.friendshipId !== item.friendshipId));
       setPendingIncoming(prev => [...prev, item]);
-    } else {
-      const { error: notifError } = await createNotification({
-        recipient_id: item.profile.id,
-        sender_id: currentUserId,
-        type: 'friend_accepted',
-        message: `${currentUserName} accepted your friend request`,
-      });
-      if (notifError) {
-        alert('Friend accepted, but notification failed: ' + notifError.message);
-      }
     }
   };
 

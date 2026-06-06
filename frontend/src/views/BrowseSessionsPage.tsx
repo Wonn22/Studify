@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../database/database';
 import DiscoveryRoomCard from '../components/DiscoveryRoomCard';
-import { getCurrentSessionUser, createNotification } from '../security/dataAccess';
+import { getCurrentSessionUser } from '../security/dataAccess';
 
 export interface SessionJoinRequest {
     id: string;
@@ -29,7 +29,6 @@ const BrowseSessions = () => {
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<SessionWithParticipants[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [currentUserName, setCurrentUserName] = useState<string>('');
     const [sessionRequests, setSessionRequests] = useState<Record<string, SessionJoinRequest[]>>({});
     const [busyAction, setBusyAction] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -45,7 +44,6 @@ const BrowseSessions = () => {
             }
 
             setCurrentUserId(user.id);
-            setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
 
             const { data, error } = await supabase
                 .from('sessions')
@@ -151,16 +149,6 @@ const BrowseSessions = () => {
             if (error) {
                 throw error;
             }
-            const { error: notifError } = await createNotification({
-                recipient_id: session.created_by,
-                sender_id: currentUserId,
-                type: 'session_join_request',
-                reference_id: session.id,
-                message: `${currentUserName} requested to join "${session.title}"`,
-            });
-            if (notifError) {
-                alert('Request sent, but notification failed: ' + notifError.message);
-            }
             await fetchSessions();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Failed to request this session.');
@@ -200,16 +188,6 @@ const BrowseSessions = () => {
             if (updateError) {
                 throw updateError;
             }
-            const { error: notifError } = await createNotification({
-                recipient_id: request.requesterId,
-                sender_id: currentUserId,
-                type: 'session_join_accepted',
-                reference_id: session.id,
-                message: `Your request to join "${session.title}" was accepted`,
-            });
-            if (notifError) {
-                alert('Accepted, but notification failed: ' + notifError.message);
-            }
             await fetchSessions();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Failed to accept request.');
@@ -231,16 +209,6 @@ const BrowseSessions = () => {
 
             if (error) {
                 throw error;
-            }
-            const { error: notifError } = await createNotification({
-                recipient_id: request.requesterId,
-                sender_id: currentUserId,
-                type: 'session_join_rejected',
-                reference_id: request.sessionId,
-                message: `Your request to join the session was rejected`,
-            });
-            if (notifError) {
-                alert('Rejected, but notification failed: ' + notifError.message);
             }
             await fetchSessions();
         } catch (err) {

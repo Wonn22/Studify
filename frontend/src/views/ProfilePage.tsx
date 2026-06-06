@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../database/database';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, createNotification, type FriendshipStatus } from '../security/dataAccess';
+import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, type FriendshipStatus } from '../security/dataAccess';
 
 interface UserProfile {
     id: string;
@@ -310,7 +310,6 @@ const ProfilePage = () => {
     const [isRequester, setIsRequester] = useState(false);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [currentUserName, setCurrentUserName] = useState<string>('');
     const [userGroups, setUserGroups] = useState<Array<{ id: string; name: string; description: string | null; status: string | null }>>([]);
     const navigate = useNavigate();
 
@@ -326,7 +325,6 @@ const ProfilePage = () => {
                 }
 
                 setCurrentUserId(user.id);
-                setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
                 const profileId = id || user.id;
                 const own = profileId === user.id;
                 setIsOwnProfile(own);
@@ -390,17 +388,6 @@ const ProfilePage = () => {
             setIsRequester(false);
             setToast('Failed to send request');
             setTimeout(() => setToast(null), 3000);
-        } else {
-            const { error: notifError } = await createNotification({
-                recipient_id: profile.id,
-                sender_id: currentUserId,
-                type: 'friend_request',
-                message: `${currentUserName} sent you a friend request`,
-            });
-            if (notifError) {
-                setToast('Friend request sent, but notification failed');
-                setTimeout(() => setToast(null), 3000);
-            }
         }
     };
 

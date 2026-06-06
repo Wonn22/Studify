@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
-import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, createNotification } from '../security/dataAccess';
+import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest } from '../security/dataAccess';
 import { Friendship } from '../types';
 
 interface Profile {
@@ -19,7 +19,6 @@ interface Profile {
 const FindPage = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,7 +40,6 @@ const FindPage = () => {
         return;
       }
       setCurrentUser(user);
-      setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
 
       const { data: allProfiles } = await supabase
         .from('profiles')
@@ -82,16 +80,6 @@ const FindPage = () => {
 
     if (error) {
       setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: null } : p));
-    } else {
-      const { error: notifError } = await createNotification({
-        recipient_id: profileId,
-        sender_id: currentUser.id,
-        type: 'friend_request',
-        message: `${currentUserName} sent you a friend request`,
-      });
-      if (notifError) {
-        alert('Friend request sent, but notification failed: ' + notifError.message);
-      }
     }
   };
 

@@ -203,75 +203,7 @@ export const cancelFriendRequest = async (
     .eq('status', 'Pending');
 };
 
-export interface NotificationInsert {
-  recipient_id: string;
-  sender_id?: string | null;
-  type: 'friend_request' | 'friend_accepted' | 'session_join_request' | 'session_join_accepted' | 'session_join_rejected' | 'task_assigned';
-  reference_id?: string | null;
-  message: string;
-}
 
-export const getUnreadNotificationCount = async (userId?: string | null) => {
-  if (!isValidUuid(userId)) return 0;
-
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('recipient_id', userId)
-    .eq('is_read', false);
-
-  if (error) return 0;
-  return count ?? 0;
-};
-
-export const getNotifications = async (userId?: string | null, limit = 20) => {
-  if (!isValidUuid(userId)) return [];
-
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*, sender:sender_id(full_name, avatar_url)')
-    .eq('recipient_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-
-  if (error) return [];
-  return data ?? [];
-};
-
-export const markNotificationAsRead = async (notificationId?: string | null) => {
-  if (!isValidUuid(notificationId)) return { error: new Error('Invalid notification ID') };
-
-  return supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('id', notificationId);
-};
-
-export const markAllNotificationsAsRead = async (userId?: string | null) => {
-  if (!isValidUuid(userId)) return { error: new Error('Invalid user ID') };
-
-  return supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('recipient_id', userId)
-    .eq('is_read', false);
-};
-
-export const createNotification = async (notification: NotificationInsert) => {
-  if (!isValidUuid(notification.recipient_id)) {
-    return { error: new Error('Invalid recipient ID') };
-  }
-
-  const { data, error } = await supabase.rpc('create_notification_rpc', {
-    p_recipient_id: notification.recipient_id,
-    p_sender_id: notification.sender_id ?? null,
-    p_type: notification.type,
-    p_reference_id: notification.reference_id ?? null,
-    p_message: notification.message,
-  });
-
-  return { data, error };
-};
 
 export const isGroupAdmin = async (groupId?: string | null, userId?: string | null) => {
   if (!isValidUuid(groupId) || !isValidUuid(userId)) return false;
