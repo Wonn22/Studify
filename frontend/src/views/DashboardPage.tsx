@@ -102,7 +102,7 @@ const Dashboard = () => {
                         }
                     }
 
-                    const mappedSessions = sessionData.slice(0, 2).map((s) => {
+                    const mappedSessions = sessionData.map((s) => {
                         const date = new Date(s.scheduled_at);
                         const endTime = new Date(date.getTime() + s.duration_minutes * 60000);
                         const timeStr = `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -202,7 +202,7 @@ const Dashboard = () => {
                                 </button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {sessions.map(s => <SessionCard key={s.id} {...s} />)}
+                                {sessions.slice(0, 2).map(s => <SessionCard key={s.id} {...s} />)}
                             </div>
                         </div>
 
@@ -233,7 +233,7 @@ const Dashboard = () => {
                 </div>
             </main>
 
-            {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} />}
+            {isCalendarOpen && <CalendarModal onClose={() => setIsCalendarOpen(false)} sessions={sessions} />}
             {isCreateSessionOpen && (
                 <CreateSessionModal
                     onClose={() => setIsCreateSessionOpen(false)}
