@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS group_join_requests (
 );
 
 -- 3. Indexes
-CREATE INDEX idx_group_join_requests_group ON group_join_requests(group_id);
-CREATE INDEX idx_group_join_requests_requester ON group_join_requests(requester_id);
-CREATE INDEX idx_group_join_requests_host ON group_join_requests(host_id);
-CREATE INDEX idx_group_join_requests_pending ON group_join_requests(group_id, status) WHERE status = 'Pending';
+CREATE INDEX IF NOT EXISTS idx_group_join_requests_group ON group_join_requests(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_join_requests_requester ON group_join_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_group_join_requests_host ON group_join_requests(host_id);
+CREATE INDEX IF NOT EXISTS idx_group_join_requests_pending ON group_join_requests(group_id, status) WHERE status = 'Pending';
 
 -- 4. Enable RLS
 ALTER TABLE group_join_requests ENABLE ROW LEVEL SECURITY;
