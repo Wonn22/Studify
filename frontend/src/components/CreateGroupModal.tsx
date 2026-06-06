@@ -13,6 +13,7 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,6 +35,8 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
           description: description.trim() || null,
           status: 'Active Research',
           deadline: deadline || null,
+          created_by: user.id,
+          is_private: isPrivate,
         })
         .select()
         .single();
@@ -117,6 +120,19 @@ const CreateGroupModal = ({ isOpen, onClose, onSuccess }: CreateGroupModalProps)
                 onChange={(e) => setDeadline(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#001F3F]/20 focus:border-[#001F3F] transition-all"
               />
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <input
+                type="checkbox"
+                id="is-private"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                className="w-4 h-4 accent-[#001F3F]"
+              />
+              <label htmlFor="is-private" className="text-sm font-medium text-slate-700 cursor-pointer">
+                Private Group <span className="text-slate-400 font-normal">(requires approval to join)</span>
+              </label>
             </div>
           </form>
         </div>

@@ -24,10 +24,9 @@ const GroupsPage = () => {
 
       const { data: groupsData, error: groupsError } = await supabase
         .from('groups')
-        .select('*');
+        .select('*, created_by');
 
       if (groupsError) {
-        console.error("Error fetching groups:", groupsError);
         setLoadError('Unable to load groups. Check your Supabase connection and refresh the page.');
         setLoading(false);
         return;
@@ -37,10 +36,16 @@ const GroupsPage = () => {
       const { data: pData, error: pError } = await supabase
         .from('group_participants')
         .select('*');
-        
+
       if (!pError && pData) {
         participantsData = pData;
       }
+
+      const myMemberships = new Set(
+        participantsData
+          .filter((p: any) => p.profile_id === user.id)
+          .map((p: any) => p.group_id)
+      );
 
       const fallbackImages = [
         "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1000&auto=format&fit=crop",
@@ -70,7 +75,9 @@ const GroupsPage = () => {
           members,
           status,
           img,
-          groupUrl: g.group_url
+          groupUrl: g.group_url,
+          isPrivate: g.is_private,
+          isMember: myMemberships.has(g.id),
         };
       });
 
@@ -161,13 +168,15 @@ const GroupsPage = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredGroups.map(group => (
-                    <GroupCard 
+                    <GroupCard
                     key={group.id}
                     id={group.id}
                     courseCode={group.code}
                     title={group.title}
                     memberCount={group.members}
                     imageUrl={group.img}
+                    isPrivate={group.isPrivate}
+                    isMember={group.isMember}
                     />
                 ))}
                 </div>

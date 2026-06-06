@@ -6,7 +6,15 @@ import KanbanBoard from '../components/KanbanBoard';
 import ResourceSidebar from '../components/ResourceSidebar';
 import DiscussionView from '../components/DiscussionView';
 import FilesView from '../components/FilesView';
-import { getCurrentSessionUser, getEffectiveGroupStatus, isValidUuid } from '../security/dataAccess';
+import { getCurrentSessionUser, getEffectiveGroupStatus, isValidUuid, isGroupAdmin, createNotification } from '../security/dataAccess';
+
+interface JoinRequest {
+  id: string;
+  requester_id: string;
+  requester_name: string;
+  requester_avatar: string | null;
+  created_at: string;
+}
 
 const ProjectWorkspace = () => {
   const { groupId } = useParams();
@@ -15,85 +23,161 @@ const ProjectWorkspace = () => {
   const [participantsCount, setParticipantsCount] = useState(0);
   const [activeTab, setActiveTab] = useState('Board');
   const [isMember, setIsMember] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUserName, setCurrentUserName] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const effectiveStatus = getEffectiveGroupStatus(group?.status, group?.deadline);
-  const canPauseGroup = isMember && effectiveStatus !== 'Completed';
+  const canPauseGroup = isAdmin && effectiveStatus !== 'Completed';
+
+  const fetchGroupDetails = async () => {
+    if (!isValidUuid(groupId)) {
+      setIsMember(false);
+      setLoadError('Invalid group link.');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('groups')
+      .select('*, created_by')
+      .eq('id', groupId)
+      .maybeSingle();
+
+    if (error) {
+      setLoadError('Unable to load this group. Check your Supabase connection and try again.');
+      setIsMember(false);
+      return;
+    }
+
+    if (!data) {
+      setLoadError('This group no longer exists or is not available.');
+      setIsMember(false);
+      return;
+    }
+
+    const effectiveStatus = getEffectiveGroupStatus(data.status, data.deadline);
+    setGroup({ ...data, status: effectiveStatus });
+
+    if (effectiveStatus === 'Completed' && data.status !== 'Completed') {
+      await supabase
+        .from('groups')
+        .update({ status: 'Completed' })
+        .eq('id', groupId);
+    }
+
+    const user = await getCurrentSessionUser();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setCurrentUser(user);
+    setCurrentUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'A user');
+
+    const { data: membership } = await supabase
+      .from('group_participants')
+      .select('group_id')
+      .eq('group_id', groupId)
+      .eq('profile_id', user.id)
+      .maybeSingle();
+
+    const member = !!membership;
+    setIsMember(member);
+
+    const admin = await isGroupAdmin(groupId, user.id);
+    setIsAdmin(admin);
+
+    const { count } = await supabase
+      .from('group_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('group_id', groupId);
+
+    if (count !== null) setParticipantsCount(count);
+
+    if (admin) {
+      const { data: reqData } = await supabase
+        .from('group_join_requests')
+        .select('id, requester_id, created_at, requester:profiles!group_join_requests_requester_id_fkey(full_name, avatar_url)')
+        .eq('group_id', groupId)
+        .eq('status', 'Pending');
+
+      if (reqData) {
+        setPendingRequests(reqData.map((r: any) => ({
+          id: r.id,
+          requester_id: r.requester_id,
+          requester_name: Array.isArray(r.requester) ? r.requester[0]?.full_name : r.requester?.full_name || 'Scholar',
+          requester_avatar: Array.isArray(r.requester) ? r.requester[0]?.avatar_url : r.requester?.avatar_url || null,
+          created_at: r.created_at,
+        })));
+      }
+    } else if (!member && data.is_private) {
+      const { data: myReq } = await supabase
+        .from('group_join_requests')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('requester_id', user.id)
+        .eq('status', 'Pending')
+        .maybeSingle();
+      setHasPendingRequest(!!myReq);
+    }
+  };
 
   useEffect(() => {
-    const fetchGroupDetails = async () => {
-      if (!isValidUuid(groupId)) {
-        setIsMember(false);
-        setLoadError('Invalid group link.');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('id', groupId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error fetching group:", error);
-        setLoadError('Unable to load this group. Check your Supabase connection and try again.');
-        setIsMember(false);
-        return;
-      }
-
-      if (!data) {
-        setLoadError('This group no longer exists or is not available.');
-        setIsMember(false);
-        return;
-      }
-
-      const effectiveStatus = getEffectiveGroupStatus(data.status, data.deadline);
-      setGroup({ ...data, status: effectiveStatus });
-
-      if (effectiveStatus === 'Completed' && data.status !== 'Completed') {
-        await supabase
-          .from('groups')
-          .update({ status: 'Completed' })
-          .eq('id', groupId);
-      }
-
-      const user = await getCurrentSessionUser();
-      if (!user) {
-        navigate('/login');
-        return;
-      }
-
-      setCurrentUser(user);
-
-      const { data: membership, error: membershipError } = await supabase
-        .from('group_participants')
-        .select('group_id')
-        .eq('group_id', groupId)
-        .eq('profile_id', user.id)
-        .maybeSingle();
-
-      if (membershipError) {
-        console.error("Error checking group membership:", membershipError);
-        setLoadError('Unable to verify your group membership. Try refreshing the page.');
-        setIsMember(false);
-        return;
-      }
-
-      setIsMember(!!membership);
-
-      const { count } = await supabase
-        .from('group_participants')
-        .select('*', { count: 'exact', head: true })
-        .eq('group_id', groupId);
-
-      if (count !== null) setParticipantsCount(count);
-    };
-
     if (groupId) fetchGroupDetails();
   }, [groupId, navigate]);
 
+  useEffect(() => {
+    if (!groupId || !currentUser) return;
+
+    const channel = supabase
+      .channel('group-join-requests-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_join_requests' },
+        () => {
+          fetchGroupDetails();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [groupId, currentUser]);
+
   const handleJoinGroup = async () => {
     if (!currentUser || !groupId) return;
+
+    if (group?.is_private) {
+      setBusyAction('request');
+      const { error } = await supabase
+        .from('group_join_requests')
+        .upsert({
+          group_id: groupId,
+          requester_id: currentUser.id,
+          host_id: group.created_by,
+          status: 'Pending',
+        }, { onConflict: 'group_id,requester_id' });
+
+      if (!error) {
+        setHasPendingRequest(true);
+        setLoadError(null);
+        await createNotification({
+          recipient_id: group.created_by,
+          sender_id: currentUser.id,
+          type: 'session_join_request',
+          reference_id: groupId,
+          message: `${currentUserName} requested to join "${group.name}"`,
+        });
+      } else {
+        setLoadError(error.message || 'Unable to request to join this group.');
+      }
+      setBusyAction(null);
+      return;
+    }
 
     const { error } = await supabase
       .from('group_participants')
@@ -112,9 +196,70 @@ const ProjectWorkspace = () => {
       setLoadError(null);
       setParticipantsCount(prev => prev + 1);
     } else {
-      console.error("Error joining group:", error);
       setLoadError(error.message || 'Unable to join this group.');
     }
+  };
+
+  const handleAcceptRequest = async (request: JoinRequest) => {
+    if (!currentUser || !groupId) return;
+    setBusyAction(`accept:${request.id}`);
+
+    const { error: partError } = await supabase
+      .from('group_participants')
+      .upsert({
+        group_id: groupId,
+        profile_id: request.requester_id,
+        role: 'Member',
+        joined_at: new Date().toISOString(),
+      }, { onConflict: 'group_id,profile_id', ignoreDuplicates: true });
+
+    if (partError) {
+      setLoadError(partError.message || 'Failed to add member.');
+      setBusyAction(null);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('group_join_requests')
+      .update({ status: 'Accepted', decided_at: new Date().toISOString() })
+      .eq('id', request.id);
+
+    if (!updateError) {
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+      setParticipantsCount(prev => prev + 1);
+      await createNotification({
+        recipient_id: request.requester_id,
+        sender_id: currentUser.id,
+        type: 'session_join_accepted',
+        reference_id: groupId,
+        message: `Your request to join "${group?.name}" was accepted`,
+      });
+    }
+
+    setBusyAction(null);
+  };
+
+  const handleRejectRequest = async (request: JoinRequest) => {
+    if (!currentUser || !groupId) return;
+    setBusyAction(`reject:${request.id}`);
+
+    const { error } = await supabase
+      .from('group_join_requests')
+      .update({ status: 'Rejected', decided_at: new Date().toISOString() })
+      .eq('id', request.id);
+
+    if (!error) {
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+      await createNotification({
+        recipient_id: request.requester_id,
+        sender_id: currentUser.id,
+        type: 'session_join_rejected',
+        reference_id: groupId,
+        message: `Your request to join "${group?.name}" was rejected`,
+      });
+    }
+
+    setBusyAction(null);
   };
 
   const handleTogglePause = async () => {
@@ -127,7 +272,6 @@ const ProjectWorkspace = () => {
       .eq('id', group.id);
 
     if (error) {
-      console.error("Error updating group status:", error);
       setLoadError(error.message || 'Unable to update group status.');
       return;
     }
@@ -135,6 +279,9 @@ const ProjectWorkspace = () => {
     setGroup((prev: any) => prev ? { ...prev, status: nextStatus } : prev);
     setLoadError(null);
   };
+
+  const getAvatar = (url?: string | null, name?: string) =>
+    url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'Unknown')}`;
 
   if (isMember === null) {
     return (
@@ -170,12 +317,19 @@ const ProjectWorkspace = () => {
               </div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
                 {group?.description || effectiveStatus || 'Academic Research'}
+                {group?.is_private && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
+                    <span className="material-symbols-outlined text-xs">lock</span> Private
+                  </span>
+                )}
               </p>
               <h1 className="text-3xl font-extrabold tracking-tight text-[#001F3F] mb-4">
                 {group?.name || 'Loading Project...'}
               </h1>
               <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-                {loadError || 'You need to join this group to access its Kanban board, discussions, and shared academic files.'}
+                {loadError || (group?.is_private
+                  ? 'This is a private group. Request to join and wait for admin approval.'
+                  : 'You need to join this group to access its Kanban board, discussions, and shared academic files.')}
               </p>
               <div className="flex items-center justify-center gap-2 mb-8">
                 <span className="material-symbols-outlined text-slate-400 text-sm">person</span>
@@ -183,10 +337,18 @@ const ProjectWorkspace = () => {
               </div>
               <button
                 onClick={handleJoinGroup}
-                disabled={!!loadError && !group}
-                className="w-full py-4 bg-[#001F3F] text-white font-bold rounded-xl hover:bg-blue-950 transition-colors shadow-sm"
+                disabled={!!busyAction || (!!loadError && !group)}
+                className="w-full py-4 bg-[#001F3F] text-white font-bold rounded-xl hover:bg-blue-950 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loadError && !group ? 'Group Unavailable' : 'Join Group Workspace'}
+                {busyAction === 'request' ? (
+                  <><span className="material-symbols-outlined animate-spin">sync</span> Sending Request...</>
+                ) : hasPendingRequest ? (
+                  <><span className="material-symbols-outlined">schedule</span> Request Pending</>
+                ) : group?.is_private ? (
+                  <><span className="material-symbols-outlined">send</span> Request to Join</>
+                ) : (
+                  <><span className="material-symbols-outlined">login</span> Join Group Workspace</>
+                )}
               </button>
             </div>
           </div>
@@ -198,6 +360,11 @@ const ProjectWorkspace = () => {
               <header className="mb-8 shrink-0">
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
                   {group?.description || group?.status || 'Academic Research'}
+                  {group?.is_private && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-amber-600">
+                      <span className="material-symbols-outlined text-xs">lock</span> Private
+                    </span>
+                  )}
                 </p>
                 <div className="flex items-start justify-between gap-4 mb-6">
                   <h1 className="text-5xl font-extrabold tracking-tighter text-[#001F3F]">
@@ -227,6 +394,48 @@ const ProjectWorkspace = () => {
                   </div>
                 </div>
               </header>
+
+              {isAdmin && pendingRequests.length > 0 && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 shrink-0">
+                  <h3 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">person_add</span>
+                    Pending Join Requests ({pendingRequests.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {pendingRequests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-100">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getAvatar(req.requester_avatar, req.requester_name)}
+                            alt={req.requester_name}
+                            className="w-8 h-8 rounded-full object-cover bg-slate-200"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{req.requester_name}</p>
+                            <p className="text-xs text-slate-400">Requested to join</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleAcceptRequest(req)}
+                            disabled={busyAction === `accept:${req.id}`}
+                            className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-xs">check</span> Accept
+                          </button>
+                          <button
+                            onClick={() => handleRejectRequest(req)}
+                            disabled={busyAction === `reject:${req.id}`}
+                            className="px-3 py-1.5 bg-slate-200 text-slate-600 text-xs font-bold rounded hover:bg-slate-300 transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-xs">close</span> Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {activeTab === 'Board' && (
                 <div className="flex-1 overflow-y-auto min-h-0 pr-4 pb-10">

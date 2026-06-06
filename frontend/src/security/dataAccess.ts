@@ -269,6 +269,21 @@ export const createNotification = async (notification: NotificationInsert) => {
   return supabase.from('notifications').insert(notification);
 };
 
+export const isGroupAdmin = async (groupId?: string | null, userId?: string | null) => {
+  if (!isValidUuid(groupId) || !isValidUuid(userId)) return false;
+
+  const { data, error } = await supabase
+    .from('group_participants')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('profile_id', userId)
+    .eq('role', 'Admin')
+    .maybeSingle();
+
+  if (error) return false;
+  return Boolean(data);
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 
