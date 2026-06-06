@@ -19,6 +19,7 @@ const Dashboard = () => {
     const [sessions, setSessions] = useState<any[]>([]);
     const [partners, setPartners] = useState<any[]>([]);
     const [activities, setActivities] = useState<any[]>([]);
+    const [stats, setStats] = useState({ totalStudyTime: 0, consistencyPercent: 0 });
     const [loading, setLoading] = useState(true);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
@@ -62,6 +63,26 @@ const Dashboard = () => {
                         .filter((s): s is Session => s !== null);
 
                     sessionData.sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+
+                    // Calculate dynamic performance stats
+                    const totalMinutes = sessionData.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+                    const totalStudyTime = Math.round(totalMinutes / 60);
+
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const sevenDaysAgo = new Date(today);
+                    sevenDaysAgo.setDate(today.getDate() - 6);
+
+                    const activeDays = new Set<string>();
+                    sessionData.forEach((s) => {
+                        const sessionDate = new Date(s.scheduled_at);
+                        sessionDate.setHours(0, 0, 0, 0);
+                        if (sessionDate >= sevenDaysAgo && sessionDate <= today) {
+                            activeDays.add(sessionDate.toISOString().split('T')[0]);
+                        }
+                    });
+                    const consistencyPercent = Math.round((activeDays.size / 7) * 100);
+                    setStats({ totalStudyTime, consistencyPercent });
 
                     const sessionIds = sessionData.map((s) => s.id);
                     let participantCounts: Record<string, number> = {};
@@ -204,8 +225,8 @@ const Dashboard = () => {
 
                     <div className="col-span-12 lg:col-span-4 space-y-8">
                         <StatsCard
-                            totalStudyTime={profile?.total_study_time_hours || 0}
-                            consistencyPercent={profile?.consistency_percent || 0}
+                            totalStudyTime={stats.totalStudyTime}
+                            consistencyPercent={stats.consistencyPercent}
                         />
                         <ActivityFeed activities={activities} />
                     </div>
