@@ -25,8 +25,9 @@ ALTER TABLE group_participants
 CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
 
 -- 5. Update RLS policies for groups
--- Only creator (or admin) can update their group
+-- Drop old and current policy names to allow re-runs
 DROP POLICY IF EXISTS "Users can update own groups" ON groups;
+DROP POLICY IF EXISTS "Group creators can update their groups" ON groups;
 CREATE POLICY "Group creators can update their groups"
     ON groups FOR UPDATE
     TO authenticated
@@ -34,6 +35,7 @@ CREATE POLICY "Group creators can update their groups"
 
 -- Only creator can delete their group
 DROP POLICY IF EXISTS "Users can delete own groups" ON groups;
+DROP POLICY IF EXISTS "Group creators can delete their groups" ON groups;
 CREATE POLICY "Group creators can delete their groups"
     ON groups FOR DELETE
     TO authenticated
