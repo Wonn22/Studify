@@ -25,14 +25,14 @@ CREATE TABLE notifications (
 );
 
 -- Indexes for common query patterns
-CREATE INDEX idx_notifications_recipient_created
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
     ON notifications(recipient_id, created_at DESC);
 
-CREATE INDEX idx_notifications_unread
+CREATE INDEX IF NOT EXISTS idx_notifications_unread
     ON notifications(recipient_id, created_at DESC)
     WHERE is_read = FALSE;
 
-CREATE INDEX idx_notifications_type
+CREATE INDEX IF NOT EXISTS idx_notifications_type
     ON notifications(type, recipient_id);
 
 -- Enable RLS
