@@ -94,7 +94,8 @@ const BrowseSessions = () => {
             });
 
             setSessionRequests(requestsBySession);
-        } catch {
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to load sessions.');
         } finally {
             setLoading(false);
         }
@@ -232,7 +233,8 @@ const BrowseSessions = () => {
 
     const visibleSessions = sessions.filter(session => {
         const participantCount = session.participants?.length || 0;
-        return participantCount < session.max_members || getRequestStatus(session) !== 'none';
+        const effectiveMax = session.max_members ?? Infinity;
+        return participantCount < effectiveMax || getRequestStatus(session) !== 'none';
     });
 
     return (
