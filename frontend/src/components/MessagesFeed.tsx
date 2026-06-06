@@ -8,9 +8,10 @@ interface Activity {
 
 interface ActivityFeedProps {
     activities: Activity[];
+    onViewAll?: () => void;
 }
 
-const ActivityFeed = ({ activities }: ActivityFeedProps) => {
+const ActivityFeed = ({ activities, onViewAll }: ActivityFeedProps) => {
 
     return (
         <div className="bg-slate-50 p-8 rounded-lg border border-slate-100">
@@ -27,7 +28,10 @@ const ActivityFeed = ({ activities }: ActivityFeedProps) => {
                     </div>
                 ))}
             </div>
-            <button className="w-full mt-8 py-3 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-slate-950 transition-colors border border-slate-200 rounded-md">
+            <button 
+                onClick={onViewAll}
+                className="w-full mt-8 py-3 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-slate-950 transition-colors border border-slate-200 rounded-md"
+            >
                 View All Messages
             </button>
         </div>

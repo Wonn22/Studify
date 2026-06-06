@@ -228,7 +228,7 @@ const Dashboard = () => {
                             totalStudyTime={stats.totalStudyTime}
                             consistencyPercent={stats.consistencyPercent}
                         />
-                        <ActivityFeed activities={activities} />
+                        <ActivityFeed activities={activities} onViewAll={() => navigate('/messages')} />
                     </div>
                 </div>
             </main>
