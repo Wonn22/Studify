@@ -68,6 +68,22 @@ const Dashboard = () => {
 
                     sessionData.sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
+                    const sessionIds = sessionData.map((s: any) => s.id);
+                    let participantCounts: Record<string, number> = {};
+
+                    if (sessionIds.length > 0) {
+                        const { data: countsData } = await supabase
+                            .from('session_participants')
+                            .select('session_id')
+                            .in('session_id', sessionIds);
+
+                        if (countsData) {
+                            countsData.forEach((row: any) => {
+                                participantCounts[row.session_id] = (participantCounts[row.session_id] || 0) + 1;
+                            });
+                        }
+                    }
+
                     const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
                         const date = new Date(s.scheduled_at);
                         const endTime = new Date(date.getTime() + s.duration_minutes * 60000);
@@ -79,7 +95,7 @@ const Dashboard = () => {
                             time: timeStr,
                             tag: s.subject,
                             isGroup: true,
-                            members: Math.floor(Math.random() * 3) + 2,
+                            members: participantCounts[s.id] || 1,
                             scheduledAt: s.scheduled_at,
                             durationMinutes: s.duration_minutes
                         };

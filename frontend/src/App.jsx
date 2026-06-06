@@ -10,6 +10,7 @@ import MessagesPage from './views/MessagesPage'
 import FindPage from './views/FindPage'
 import GroupsPage from './views/GroupsPage'
 import ProjectWorkspace from './views/ProjectWorkspace'
+import ConnectionsPage from './views/ConnectionsPage'
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/match" element={<FindPage />} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:groupId" element={<ProjectWorkspace />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

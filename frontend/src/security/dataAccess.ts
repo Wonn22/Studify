@@ -191,6 +191,22 @@ export const acceptFriendRequest = async (
     .eq('status', 'Pending');
 };
 
+export const cancelFriendRequest = async (
+  currentUserId?: string | null,
+  profileId?: string | null,
+) => {
+  if (!isValidUuid(currentUserId) || !isValidUuid(profileId) || currentUserId === profileId) {
+    return { error: new Error('Invalid request') };
+  }
+
+  return supabase
+    .from('friendships')
+    .delete()
+    .eq('requester_id', currentUserId)
+    .eq('addressee_id', profileId)
+    .eq('status', 'Pending');
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 

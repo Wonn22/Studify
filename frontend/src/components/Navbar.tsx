@@ -71,6 +71,12 @@ const Navbar = () => {
             >
               Messages
             </button>
+            <button 
+              onClick={() => navigate('/connections')} 
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/connections') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              Connections
+            </button>
           </nav>
         </div>
 

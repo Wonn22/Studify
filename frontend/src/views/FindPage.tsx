@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
-import { isValidUuid, sendFriendRequest, acceptFriendRequest } from '../security/dataAccess';
+import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest } from '../security/dataAccess';
 
 interface Profile {
   id: string;
@@ -95,6 +95,19 @@ const FindPage = () => {
     }
   };
 
+  const handleCancelMatch = async (profileId: string) => {
+    if (!currentUser) return;
+    if (!isValidUuid(profileId) || profileId === currentUser.id) return;
+
+    setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: null, is_requester: false } : p));
+
+    const { error } = await cancelFriendRequest(currentUser.id, profileId);
+
+    if (error) {
+      setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: 'Pending', is_requester: true } : p));
+    }
+  };
+
   const getAvatar = (url?: string, name?: string) => 
     url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'Unknown')}`;
 
@@ -184,9 +197,9 @@ const FindPage = () => {
                   
                   {profile.friendship_status === 'Pending' ? (
                     profile.is_requester ? (
-                      <button disabled className="w-full bg-slate-200 text-slate-500 py-2.5 rounded-md text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                        Request Pending
-                        <span className="material-symbols-outlined text-sm">schedule</span>
+                      <button onClick={() => handleCancelMatch(profile.id)} className="w-full bg-slate-200 text-slate-500 py-2.5 rounded-md text-sm font-bold hover:bg-slate-300 transition-colors flex items-center justify-center gap-2">
+                        Cancel Request
+                        <span className="material-symbols-outlined text-sm">close</span>
                       </button>
                     ) : (
                       <button onClick={() => handleAcceptMatch(profile.id)} className="w-full bg-emerald-100 text-emerald-800 border border-emerald-300 py-2.5 rounded-md text-sm font-bold hover:bg-emerald-200 transition-colors flex items-center justify-center gap-2">

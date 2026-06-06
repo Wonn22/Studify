@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../database/database';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, type FriendshipStatus } from '../security/dataAccess';
+import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, type FriendshipStatus } from '../security/dataAccess';
 
 interface UserProfile {
     id: string;
@@ -310,6 +310,7 @@ const ProfilePage = () => {
     const [isRequester, setIsRequester] = useState(false);
     const [isOwnProfile, setIsOwnProfile] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [userGroups, setUserGroups] = useState<Array<{ id: string; name: string; description: string | null; status: string | null }>>([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -342,6 +343,15 @@ const ProfilePage = () => {
                     throw error;
                 }
                 setProfile(data);
+
+                const { data: groupData } = await supabase
+                    .from('group_participants')
+                    .select('group:groups(id, name, description, status)')
+                    .eq('profile_id', profileId);
+
+                if (groupData) {
+                    setUserGroups(groupData.map((g: any) => g.group).filter(Boolean));
+                }
 
                 if (!own) {
                     const status = await getFriendshipStatus(user.id, profileId);
@@ -388,6 +398,19 @@ const ProfilePage = () => {
         if (error) {
             setFriendshipStatus('Pending');
             setToast('Failed to accept request');
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
+
+    const handleCancelRequest = async () => {
+        if (!currentUserId || !profile || isOwnProfile) return;
+        setFriendshipStatus(null);
+        setIsRequester(false);
+        const { error } = await cancelFriendRequest(currentUserId, profile.id);
+        if (error) {
+            setFriendshipStatus('Pending');
+            setIsRequester(true);
+            setToast('Failed to cancel request');
             setTimeout(() => setToast(null), 3000);
         }
     };
@@ -460,8 +483,8 @@ const ProfilePage = () => {
                                 </>
                             ) : friendshipStatus === 'Pending' ? (
                                 isRequester ? (
-                                    <button disabled className="w-full bg-slate-200 text-slate-500 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 cursor-not-allowed">
-                                        <span className="material-symbols-outlined text-lg">schedule</span> Request Pending
+                                    <button onClick={handleCancelRequest} className="w-full bg-slate-200 text-slate-500 py-3 rounded-lg font-semibold hover:bg-slate-300 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">close</span> Cancel Request
                                     </button>
                                 ) : (
                                     <button onClick={handleAcceptRequest} className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2">
@@ -484,12 +507,7 @@ const ProfilePage = () => {
                             )}
                         </div>
 
-                        <div className="mt-auto pt-12 space-y-3 w-full">
-                            <div className="flex items-center gap-3 text-slate-600">
-                                <span className="material-symbols-outlined text-[18px]">location_on</span>
-                                <span className="text-sm font-label uppercase tracking-wider">Binus, Alam Sutera</span>
-                            </div>
-                        </div>
+
                     </aside>
 
                     <div className="flex-grow p-10 md:p-16 space-y-16">
@@ -518,18 +536,20 @@ const ProfilePage = () => {
                         <section>
                             <SectionHeader label="Active Investigations" title="Ongoing Projects" />
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <ProjectCard
-                                    title="Semantic Graph Mapping"
-                                    desc="Collaborative project to map academic synthesis using modern AI clusters."
-                                    icon="group"
-                                    meta="4 Collaborators"
-                                />
-                                <ProjectCard
-                                    title="Studify System Architecture"
-                                    desc="Building the next generation of academic matching systems for Binusians."
-                                    icon="science"
-                                    meta="Academic Thesis"
-                                />
+                                {userGroups.length > 0 ? (
+                                    userGroups.map(group => (
+                                        <ProjectCard
+                                            key={group.id}
+                                            title={group.name}
+                                            desc={group.description || 'No description provided.'}
+                                            icon="group"
+                                            meta={group.status || 'Active Research'}
+                                            onClick={() => navigate(`/groups/${group.id}`)}
+                                        />
+                                    ))
+                                ) : (
+                                    <div className="col-span-2 text-slate-400 italic">No active projects yet.</div>
+                                )}
                             </div>
                         </section>
                     </div>
@@ -556,8 +576,8 @@ const SectionHeader = ({ label, title }: { label: string, title: string }) => (
     </>
 );
 
-const ProjectCard = ({ title, desc, icon, meta }: any) => (
-    <div className="group bg-slate-50 p-6 rounded-lg transition-all hover:bg-slate-100 cursor-pointer border border-transparent hover:border-slate-200">
+const ProjectCard = ({ title, desc, icon, meta, onClick }: { title: string; desc: string; icon: string; meta: string; onClick?: () => void }) => (
+    <div onClick={onClick} className="group bg-slate-50 p-6 rounded-lg transition-all hover:bg-slate-100 cursor-pointer border border-transparent hover:border-slate-200">
         <h3 className="text-lg font-bold text-primary mb-2 group-hover:text-primary-container font-headline">{title}</h3>
         <p className="text-sm text-slate-500 mb-4">{desc}</p>
         <div className="flex items-center gap-2">
