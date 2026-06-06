@@ -158,6 +158,13 @@ const MessagesPage = () => {
     }, [navigate]);
 
     useEffect(() => {
+        if (!socket || contacts.length === 0) return;
+        contacts.forEach(contact => {
+            socket.emit('join_dm_room', { contactId: contact.id });
+        });
+    }, [socket, contacts]);
+
+    useEffect(() => {
         if (!currentUser || !selectedContact || !socket) return;
 
         const fetchChatData = async () => {
@@ -550,15 +557,11 @@ const MessagesPage = () => {
                                         <div className="relative max-w-md">
                                             <div className={`p-4 rounded-2xl shadow-sm ${isMe ? 'bg-[#001F3F] text-white rounded-tr-none' : 'bg-white text-slate-900 rounded-tl-none border border-slate-100'}`}>
                                                 <p className="text-sm">{msg.content}</p>
-                                                <div className="flex items-center gap-1 mt-1">
+                                                <div className="flex items-center gap-1.5 mt-1">
                                                     <span className="text-[10px] opacity-60">{formatTime(msg.created_at)}</span>
                                                     {isMe && (
-                                                        <span className="text-[10px] opacity-80 leading-none">
-                                                            {msg.is_read ? (
-                                                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>done_all</span>
-                                                            ) : (
-                                                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>check</span>
-                                                            )}
+                                                        <span className={`text-[9px] font-semibold tracking-wide ${msg.is_read ? 'text-blue-300' : 'text-white/40'}`}>
+                                                            {msg.is_read ? 'Read' : 'Sent'}
                                                         </span>
                                                     )}
                                                 </div>
