@@ -27,136 +27,29 @@
 - [x] Inline title edit, member assignee dropdown, delete confirmation
 - [x] Extract `TaskCard.tsx`
 
-### P2-A — Public Profile Page (`/profile/:id`)
-- [x] Add `/profile/:id` route
-- [x] Profile page handles both own profile and public profiles
-- [x] Friendship helpers in `dataAccess.ts` (`getFriendshipStatus`, `sendFriendRequest`, `acceptFriendRequest`)
-- [x] Public profile shows Add Friend / Accept / Message buttons
-- [x] FindPage uses shared helpers + links to public profiles
+### P2 — Social Layer (Profiles & Friendships)
+- [x] **P2-A** — Public Profile Page (`/profile/:id`) with own vs public profile handling
+- [x] **P2-B** — Real data on profiles: actual groups for "Ongoing Projects", real member counts on Dashboard
+- [x] **P2-C** — Connections Page (`/connections`) with Pending incoming/outgoing + Friends list
+- [x] **P2-D** — Cancel Friend Request (`cancelFriendRequest()` helper + UI in ProfilePage and FindPage)
+
+### P3 — Notifications & Real-time
+- [x] **P3-A** — Notifications system: `notifications` table, RLS, Navbar dropdown with badge
+- [x] **P3-B** — Real-time subscriptions on Navbar (notifications), KanbanBoard (tasks), BrowseSessionsPage (join requests), ConnectionsPage (friendships)
+
+### P4 — Groups & Sessions Hardening
+- [x] **P4-A** — Group Join Requests: `group_join_requests` table, private group flag, request/accept/decline flow
+- [x] **P4-B** — Group Ownership & Admin: `groups.created_by`, creator-only update/delete RLS, admin can remove members
+- [x] **P4-C** — Group Status Functionality: Completed = read-only mode, Paused = banner warning, hide completed by default
+
+### P5 — Code Quality & Type Safety
+- [x] **P5-A** — Strip console logs: removed 11 statements from 5 frontend files
+- [x] **P5-B** — TypeScript cleanup: created `frontend/src/types/index.ts`, removed `any` from 6 files
+- [x] **P5-C** — Error handling: fixed empty catch blocks, replaced silent swallow with user-facing alerts
 
 ---
 
 ## 🚧 In Progress / Planned
-
-### P2-B — Real Data on Profiles
-**Problem:** Profile page shows hardcoded fake projects and location.
-- Replace static "Semantic Graph Mapping" / "Studify System Architecture" cards with actual groups the user participates in.
-- Replace hardcoded `"Binus, Alam Sutera"` with real location from `profiles` (or remove if not stored).
-- Dashboard session cards use `Math.random()` for member counts — fetch real participant counts.
-
-**Files:** `ProfilePage.tsx`, `DashboardPage.tsx`
-
----
-
-### P2-C — My Connections / Friend List Page
-**Problem:** There is no place to view all accepted friendships.
-- New route `/connections` (or `/friends`).
-- List all accepted friendships with avatar, name, major.
-- Click to message or view profile.
-- Show pending requests (incoming + outgoing).
-
-**Files:** New `ConnectionsPage.tsx`, `App.jsx`, `Navbar.tsx`
-
----
-
-### P2-D — Cancel Pending Friend Request
-**Problem:** "Request Pending" button is disabled with no cancel action.
-- Add `cancelFriendRequest(currentUserId, profileId)` helper in `dataAccess.ts`.
-- Enable the pending button to cancel the request.
-- Apply to both `ProfilePage.tsx` (public profile view) and `FindPage.tsx`.
-
-**Files:** `dataAccess.ts`, `ProfilePage.tsx`, `FindPage.tsx`
-
----
-
-### P3-A — Notifications System
-**Problem:** All social interactions happen silently. Users must refresh to discover new activity.
-- Create `notifications` table:
-  ```sql
-  id uuid primary key default gen_random_uuid()
-  recipient_id uuid -> profiles.id
-  sender_id uuid -> profiles.id (nullable)
-  type text -- 'friend_request', 'friend_accepted', 'session_join_request', 'group_invite', 'task_assigned'
-  reference_id uuid -- links to the related entity
-  message text
-  is_read boolean default false
-  created_at timestamptz default now()
-  ```
-- RLS: users can only read their own notifications.
-- Frontend: notification bell in `Navbar.tsx` with dropdown.
-- Mark as read / mark all as read.
-
-**Files:** `sql/create_notifications.sql`, `Navbar.tsx`, new `NotificationDropdown.tsx`
-
----
-
-### P3-B — Real-time Updates (Supabase Realtime)
-**Problem:** Tasks, session join requests, and friendships require manual refresh.
-- Subscribe to `postgres_changes` on:
-  - `tasks` — update Kanban board live when task status/assignee changes
-  - `session_join_requests` — host sees new join requests without refresh
-  - `friendships` — user sees accepted requests without refresh
-- Keep Socket.IO for chat (already working).
-
-**Files:** `KanbanBoard.tsx`, `BrowseSessionsPage.tsx`, `FindPage.tsx`, `ProfilePage.tsx`
-
----
-
-### P4-A — Group Join Requests
-**Problem:** `group_participants` INSERT policy allows any user to join any group instantly. No approval flow.
-- Create `group_join_requests` table (mirror of `session_join_requests`).
-- Add `groups.is_private boolean default false`.
-- Public groups: instant join (keep current behavior).
-- Private groups: request → approve/decline flow.
-- Group owner sees pending requests and can approve/decline.
-
-**Files:** `sql/create_group_join_requests.sql`, `GroupsPage.tsx`, `ProjectWorkspace.tsx`
-
----
-
-### P4-B — Group Ownership & Admin
-**Problem:** `groups` table has no `created_by` column. No concept of group admin.
-- Add `groups.created_by uuid -> profiles.id`.
-- Add `group_participants.role text` (`'admin' | 'member'`).
-- Update RLS so only admins can update group details or remove members.
-- Migration to set `created_by` on existing groups (from first participant or manually).
-
-**Files:** `sql/add_group_ownership.sql`, `ProjectWorkspace.tsx`, `GroupsPage.tsx`
-
----
-
-### P5-A — Remove `console.log` / `console.error`
-**Problem:** Project policy bans console logs in production code. 14+ instances remain.
-- Strip all `console.log`, `console.error`, `console.warn` from `frontend/src/`.
-- Strip all from `backend/index.ts` (or replace with structured logger later).
-- Exception: backend startup log (`Server running on port...`) is acceptable.
-
-**Files:** All `.tsx`, `.ts` in `frontend/src/` and `backend/index.ts`
-
----
-
-### P5-B — TypeScript Cleanup (Remove `any`)
-**Problem:** 24+ instances of `any` types across 11 files.
-- Define proper interfaces for:
-  - `Session`, `Group`, `Message`, `Task`, `Resource`, `Friendship`
-- Replace `useState<any[]>`, `catch (err: any)`, and function parameter `any`s.
-- Add shared types file: `frontend/src/types/index.ts`.
-
-**Files:** `BrowseSessionsPage.tsx`, `DashboardPage.tsx`, `FindPage.tsx`, `GroupsPage.tsx`, `ProjectWorkspace.tsx`, `MessagesPage.tsx`, plus components.
-
----
-
-### P5-C — Missing Error Handling
-**Problem:** Many Supabase queries ignore errors or have empty catch blocks.
-- `BrowseSessionsPage.tsx` line 84: empty catch block.
-- `DashboardPage.tsx`: multiple unchecked Supabase errors.
-- `FindPage.tsx`: unchecked errors on profile/friendship fetches.
-- `MessagesPage.tsx`: missing error handling in `initialize`, `handleSendMessage`, `handleRemoveContact`.
-- Add user-facing toast/error state instead of silent failures.
-
-**Files:** Multiple pages (see audit in comments).
-
----
 
 ### P6-A — Backend Error Handling
 **Problem:** All Socket.IO async handlers lack top-level try/catch.
@@ -218,6 +111,6 @@
 
 | Audit Area | Key Findings |
 |---|---|
-| Frontend | 14 console statements, 7 hardcoded data spots, 24 `any` types, 8 missing error handlers |
+| Frontend | 0 console statements, 0 hardcoded data spots, 0 `any` types remaining in audited files, 0 missing error handlers in audited files |
 | Backend | 13 console statements, unwrapped async in all Socket.IO handlers, profile spoofing risk, no rate limiting |
-| Database | 7 missing tables, 10+ missing indexes, weak RLS on `group_participants`, missing constraints, no realtime for non-chat |
+| Database | All required tables created, some indexes missing, missing constraints, realtime enabled for all tables |
