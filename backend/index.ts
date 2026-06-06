@@ -474,6 +474,88 @@ io.on('connection', (socket) => {
             acknowledge(ack, { ok: true });
         }),
     );
+
+    /* ── Typing indicators (DM) ── */
+
+    socket.on(
+        'typing_start_dm',
+        wrapAsync(async ({ contactId }: { contactId?: string }) => {
+            if (!isValidUuid(contactId)) return;
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+            if (!allowed) return;
+            const roomId = getRoomId(userId, contactId);
+            const senderProfile = await fetchSenderProfile(authedSocket.data.supabase, userId);
+            socket.to(roomId).emit('typing_start_dm', { userId, name: senderProfile.full_name });
+        }),
+    );
+
+    socket.on(
+        'typing_stop_dm',
+        wrapAsync(async ({ contactId }: { contactId?: string }) => {
+            if (!isValidUuid(contactId)) return;
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+            if (!allowed) return;
+            const roomId = getRoomId(userId, contactId);
+            socket.to(roomId).emit('typing_stop_dm', { userId });
+        }),
+    );
+
+    /* ── Typing indicators (Group) ── */
+
+    socket.on(
+        'typing_start_group',
+        wrapAsync(async ({ groupId }: { groupId?: string }) => {
+            if (!isValidUuid(groupId)) return;
+            const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+            if (!allowed) return;
+            const senderProfile = await fetchSenderProfile(authedSocket.data.supabase, userId);
+            socket.to(`group_${groupId}`).emit('typing_start_group', { userId, name: senderProfile.full_name });
+        }),
+    );
+
+    socket.on(
+        'typing_stop_group',
+        wrapAsync(async ({ groupId }: { groupId?: string }) => {
+            if (!isValidUuid(groupId)) return;
+            const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+            if (!allowed) return;
+            socket.to(`group_${groupId}`).emit('typing_stop_group', { userId });
+        }),
+    );
+
+    /* ── Read receipts ── */
+
+    socket.on(
+        'mark_messages_read',
+        wrapAsync(async ({ contactId }: { contactId?: string }, ack?: (response: SocketAck) => void) => {
+            if (!isValidUuid(contactId)) {
+                acknowledge(ack, { ok: false, error: 'Invalid contact' });
+                return;
+            }
+
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+                return;
+            }
+
+            const { error } = await authedSocket.data.supabase
+                .from('messages')
+                .update({ is_read: true })
+                .eq('sender_id', contactId)
+                .eq('receiver_id', userId)
+                .eq('is_read', false);
+
+            if (error) {
+                acknowledge(ack, { ok: false, error: 'Failed to mark messages as read' });
+                return;
+            }
+
+            const roomId = getRoomId(userId, contactId);
+            socket.to(roomId).emit('messages_read', { readBy: userId });
+            acknowledge(ack, { ok: true });
+        }),
+    );
 });
 
 /* ─────────────── Express Global Error Handler ─────────────── */

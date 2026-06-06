@@ -28,8 +28,10 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [showEmojis, setShowEmojis] = useState(false);
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
+  const [typingUsers, setTypingUsers] = useState<{ userId: string; name: string }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojis = ['😀', '😂', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '✨', '💯', '🤔'];
 
   const scrollToBottom = () => {
@@ -93,12 +95,25 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
       setMessages(prev => prev.filter(m => m.id !== messageId));
     };
 
+    const onTypingStartGroup = ({ userId: uid, name }: { userId: string; name: string }) => {
+      if (uid === currentUser?.id) return;
+      setTypingUsers(prev => prev.some(u => u.userId === uid) ? prev : [...prev, { userId: uid, name }]);
+    };
+
+    const onTypingStopGroup = ({ userId: uid }: { userId: string }) => {
+      setTypingUsers(prev => prev.filter(u => u.userId !== uid));
+    };
+
     socket?.on('new_group_message', onNewGroupMessage);
     socket?.on('group_message_deleted', onGroupMessageDeleted);
+    socket?.on('typing_start_group', onTypingStartGroup);
+    socket?.on('typing_stop_group', onTypingStopGroup);
 
     return () => {
       socket?.off('new_group_message', onNewGroupMessage);
       socket?.off('group_message_deleted', onGroupMessageDeleted);
+      socket?.off('typing_start_group', onTypingStartGroup);
+      socket?.off('typing_stop_group', onTypingStopGroup);
     };
   }, [groupId, socket, currentUser, canAccess]);
 
@@ -323,6 +338,11 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
 
       {!readOnly && (
         <div className="p-4 bg-white border-t border-slate-100 shrink-0 relative">
+          {typingUsers.length > 0 && (
+            <div className="absolute -top-7 left-4 right-4 text-xs text-blue-500 font-medium animate-pulse">
+              {typingUsers.map(u => u.name).join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+            </div>
+          )}
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2 pr-2">
             <input
               type="file"
@@ -341,7 +361,16 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
               className="flex-1 bg-transparent border-none text-sm text-slate-800 focus:ring-0 placeholder:text-slate-400 px-2 outline-none"
               placeholder="Type a message..."
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                if (groupId && socket) {
+                  socket.emit('typing_start_group', { groupId });
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socket.emit('typing_stop_group', { groupId });
+                  }, 2000);
+                }
+              }}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
             />
             <div className="relative">

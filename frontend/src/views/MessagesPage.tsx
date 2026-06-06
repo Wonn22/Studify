@@ -25,6 +25,7 @@ interface Message {
     receiver_id: string;
     content: string;
     created_at: string;
+    is_read?: boolean;
 }
 
 interface SocketAck {
@@ -52,8 +53,11 @@ const MessagesPage = () => {
     const [confirmDeleteResId, setConfirmDeleteResId] = useState<string | null>(null);
     const [confirmRemoveContactId, setConfirmRemoveContactId] = useState<string | null>(null);
     const [friendshipMap, setFriendshipMap] = useState<Record<string, string>>({});
+    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+    const [typingContactId, setTypingContactId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const selectedFriendshipId = selectedContact ? friendshipMap[selectedContact.id] : null;
     const emojis = ['😀', '😂', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '✨', '💯', '🤔'];
 
@@ -116,6 +120,18 @@ const MessagesPage = () => {
             });
             setFriendshipMap(fMap);
 
+            const { data: unreadData } = await supabase
+                .from('messages')
+                .select('sender_id')
+                .eq('receiver_id', user.id)
+                .eq('is_read', false);
+
+            const unreadMap: Record<string, number> = {};
+            unreadData?.forEach((row: { sender_id: string }) => {
+                unreadMap[row.sender_id] = (unreadMap[row.sender_id] || 0) + 1;
+            });
+            setUnreadCounts(unreadMap);
+
             if (friendIds.length > 0) {
                 const { data: allContacts } = await supabase
                     .from('profiles')
@@ -172,31 +188,61 @@ const MessagesPage = () => {
         fetchChatData();
 
         socket.emit('join_dm_room', { contactId: selectedContact.id });
+        socket.emit('mark_messages_read', { contactId: selectedContact.id });
 
         const onNewMessage = (msg: Message) => {
-            const belongsToSelectedChat =
+            const isForSelectedChat =
                 (msg.sender_id === currentUser.id && msg.receiver_id === selectedContact.id) ||
                 (msg.sender_id === selectedContact.id && msg.receiver_id === currentUser.id);
 
-            if (!belongsToSelectedChat) return;
+            if (isForSelectedChat) {
+                setMessages(prev => {
+                    if (prev.some(m => m.id === msg.id)) return prev;
+                    return [...prev, msg];
+                });
+                setTimeout(scrollToBottom, 100);
+                return;
+            }
 
-            setMessages(prev => {
-                if (prev.some(m => m.id === msg.id)) return prev;
-                return [...prev, msg];
-            });
-            setTimeout(scrollToBottom, 100);
+            const otherContactId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
+            setUnreadCounts(prev => ({
+                ...prev,
+                [otherContactId]: (prev[otherContactId] || 0) + 1,
+            }));
         };
 
         const onMessageDeleted = ({ messageId }: { messageId: string }) => {
             setMessages(prev => prev.filter(m => m.id !== messageId));
         };
 
+        const onTypingStart = ({ userId: uid }: { userId: string }) => {
+            if (uid === selectedContact.id) setTypingContactId(uid);
+        };
+
+        const onTypingStop = ({ userId: uid }: { userId: string }) => {
+            setTypingContactId(prev => (prev === uid ? null : prev));
+        };
+
+        const onMessagesRead = ({ readBy }: { readBy: string }) => {
+            if (readBy === selectedContact.id) {
+                setMessages(prev => prev.map(m =>
+                    m.sender_id === currentUser.id ? { ...m, is_read: true } : m
+                ));
+            }
+        };
+
         socket.on('new_message', onNewMessage);
         socket.on('message_deleted', onMessageDeleted);
+        socket.on('typing_start_dm', onTypingStart);
+        socket.on('typing_stop_dm', onTypingStop);
+        socket.on('messages_read', onMessagesRead);
 
         return () => {
             socket.off('new_message', onNewMessage);
             socket.off('message_deleted', onMessageDeleted);
+            socket.off('typing_start_dm', onTypingStart);
+            socket.off('typing_stop_dm', onTypingStop);
+            socket.off('messages_read', onMessagesRead);
         };
     }, [currentUser, selectedContact, socket, selectedFriendshipId]);
 
@@ -442,12 +488,17 @@ const MessagesPage = () => {
                                     key={contact.id}
                                     className={`group relative flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all ${selectedContact?.id === contact.id ? 'bg-white shadow-sm border-l-4 border-[#001F3F]' : 'hover:bg-slate-100'}`}
                                 >
-                                    <div className="flex items-center gap-4 flex-1 min-w-0" onClick={() => { setSelectedContact(contact); setConfirmRemoveContactId(null); }}>
+                                    <div className="flex items-center gap-4 flex-1 min-w-0" onClick={() => { setSelectedContact(contact); setConfirmRemoveContactId(null); setUnreadCounts(prev => ({ ...prev, [contact.id]: 0 })); socket?.emit('mark_messages_read', { contactId: contact.id }); }}>
                                         <img className="w-12 h-12 rounded-lg object-cover shrink-0" src={getAvatar(contact.avatar_url, contact.full_name)} alt="" />
-                                        <div className="overflow-hidden">
+                                        <div className="overflow-hidden flex-1">
                                             <p className="text-sm font-bold text-[#001F3F] truncate">{contact.full_name}</p>
                                             <p className="text-xs text-slate-500 truncate">{contact.major}</p>
                                         </div>
+                                        {unreadCounts[contact.id] > 0 && (
+                                            <span className="shrink-0 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                {unreadCounts[contact.id]}
+                                            </span>
+                                        )}
                                     </div>
                                     {!isConfirmingRemove && (
                                         <button
@@ -481,7 +532,12 @@ const MessagesPage = () => {
                         <div className="h-20 px-8 border-b border-slate-100 flex items-center justify-between shrink-0">
                             <div className="flex items-center gap-4">
                                 <img className="w-10 h-10 rounded-lg object-cover" src={getAvatar(selectedContact.avatar_url, selectedContact.full_name)} alt="" />
-                                <h3 className="font-bold text-[#001F3F]">{selectedContact.full_name}</h3>
+                                <div>
+                                    <h3 className="font-bold text-[#001F3F]">{selectedContact.full_name}</h3>
+                                    {typingContactId === selectedContact.id && (
+                                        <p className="text-xs text-blue-500 font-medium animate-pulse">typing...</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -494,7 +550,18 @@ const MessagesPage = () => {
                                         <div className="relative max-w-md">
                                             <div className={`p-4 rounded-2xl shadow-sm ${isMe ? 'bg-[#001F3F] text-white rounded-tr-none' : 'bg-white text-slate-900 rounded-tl-none border border-slate-100'}`}>
                                                 <p className="text-sm">{msg.content}</p>
-                                                <span className="text-[10px] mt-1 block opacity-60">{formatTime(msg.created_at)}</span>
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <span className="text-[10px] opacity-60">{formatTime(msg.created_at)}</span>
+                                                    {isMe && (
+                                                        <span className="text-[10px] opacity-80 leading-none">
+                                                            {msg.is_read ? (
+                                                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>done_all</span>
+                                                            ) : (
+                                                                <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>check</span>
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             {isMe && (
                                                 <div className={`absolute -left-2 top-0 -translate-x-full flex items-center gap-1 transition-opacity ${isConfirming ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
@@ -536,7 +603,16 @@ const MessagesPage = () => {
                                     className="flex-1 bg-transparent border-none outline-none text-sm" 
                                     placeholder="Type a message..."
                                     value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onChange={(e) => {
+                                        setNewMessage(e.target.value);
+                                        if (selectedContact && socket) {
+                                            socket.emit('typing_start_dm', { contactId: selectedContact.id });
+                                            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                                            typingTimeoutRef.current = setTimeout(() => {
+                                                socket.emit('typing_stop_dm', { contactId: selectedContact.id });
+                                            }, 2000);
+                                        }
+                                    }}
                                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                 />
                                 <button onClick={handleSendMessage} className="bg-[#001F3F] text-white p-2 rounded-lg material-symbols-outlined">send</button>
