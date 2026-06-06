@@ -45,25 +45,20 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
     const handleSubmit = async () => {
         const trimmedTitle = title.trim();
         const trimmedMeetingLink = meetingLink.trim();
-        console.log('[CreateSession] handleSubmit — title:', trimmedTitle, 'subject:', subject, 'date:', scheduledDate, 'time:', scheduledTime);
 
         if (!trimmedTitle) {
-            console.warn('[CreateSession] validation failed: missing title');
             setError('Session title is required.');
             return;
         }
         if (!scheduledDate || !scheduledTime) {
-            console.warn('[CreateSession] validation failed: missing date/time');
             setError('Please set a date and time.');
             return;
         }
         if (!trimmedMeetingLink) {
-            console.warn('[CreateSession] validation failed: missing meeting link');
             setError('Meeting link is required.');
             return;
         }
         if (!isHttpUrl(trimmedMeetingLink)) {
-            console.warn('[CreateSession] validation failed: invalid meeting link', trimmedMeetingLink);
             setError('Meeting link must be a valid http or https URL.');
             return;
         }
@@ -74,13 +69,10 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
         try {
             const user = await getCurrentSessionUser();
             if (!user) {
-                console.error('[CreateSession] not authenticated');
                 throw new Error('Not authenticated');
             }
-            console.log('[CreateSession] authenticated user:', user.id);
 
             const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
-            console.log('[CreateSession] computed scheduledAt:', scheduledAt);
 
             const { data: newSession, error: insertError } = await supabase
                 .from('sessions')
@@ -98,14 +90,11 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                 .single();
 
             if (insertError) {
-                console.error('[CreateSession] session insert error:', insertError.message, insertError.details);
                 throw insertError;
             }
             if (!newSession) {
-                console.error('[CreateSession] session insert returned no data');
                 throw new Error('Session was created without returning an id.');
             }
-            console.log('[CreateSession] session created:', newSession.id);
 
             const { error: participantError } = await supabase
                 .from('session_participants')
@@ -115,15 +104,12 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                 }, { onConflict: 'session_id,profile_id' });
 
             if (participantError) {
-                console.error('[CreateSession] participant upsert error:', participantError.message);
                 throw participantError;
             }
-            console.log('[CreateSession] host added as participant');
 
             onSessionCreated();
             onClose();
         } catch (err: any) {
-            console.error('[CreateSession] handleSubmit catch:', err?.message || err);
             setError(err.message || 'Failed to create session.');
         } finally {
             setLoading(false);
