@@ -11,14 +11,7 @@ import CalendarModal from '../components/CalendarModal';
 import PartnerProfileModal from '../components/PartnerProfileModal';
 import CreateSessionModal from '../components/CreateSessionModal';
 import { getCurrentSessionUser } from '../security/dataAccess';
-
-interface Profile {
-    id: string;
-    full_name: string;
-    total_study_time_hours: number;
-    consistency_percent: number;
-    major?: string;
-}
+import { Profile, Session } from '../types';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -52,7 +45,7 @@ const Dashboard = () => {
 
                 setProfile(profileData as Profile);
 
-                const { data: participantData } = await supabase
+                const { data: rawParticipantData } = await supabase
                     .from('session_participants')
                     .select(`
                         sessions (
@@ -61,30 +54,34 @@ const Dashboard = () => {
                     `)
                     .eq('profile_id', user.id);
 
+                const participantData = rawParticipantData as { sessions: Session | null }[] | null;
+
                 if (participantData) {
                     let sessionData = participantData
-                        .map((p: any) => p.sessions)
-                        .filter((s: any) => s !== null);
+                        .map((p) => p.sessions)
+                        .filter((s): s is Session => s !== null);
 
-                    sessionData.sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+                    sessionData.sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
-                    const sessionIds = sessionData.map((s: any) => s.id);
+                    const sessionIds = sessionData.map((s) => s.id);
                     let participantCounts: Record<string, number> = {};
 
                     if (sessionIds.length > 0) {
-                        const { data: countsData } = await supabase
+                        const { data: rawCountsData } = await supabase
                             .from('session_participants')
                             .select('session_id')
                             .in('session_id', sessionIds);
 
+                        const countsData = rawCountsData as { session_id: string }[] | null;
+
                         if (countsData) {
-                            countsData.forEach((row: any) => {
+                            countsData.forEach((row) => {
                                 participantCounts[row.session_id] = (participantCounts[row.session_id] || 0) + 1;
                             });
                         }
                     }
 
-                    const mappedSessions = sessionData.slice(0, 2).map((s: any) => {
+                    const mappedSessions = sessionData.slice(0, 2).map((s) => {
                         const date = new Date(s.scheduled_at);
                         const endTime = new Date(date.getTime() + s.duration_minutes * 60000);
                         const timeStr = `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -110,7 +107,7 @@ const Dashboard = () => {
                     .limit(3);
 
                 if (profilesData) {
-                    const mappedPartners = profilesData.map((p: any) => ({
+                    const mappedPartners = profilesData.map((p: Profile) => ({
                         id: p.id,
                         name: p.full_name || 'Anonymous User',
                         major: p.major || 'Undeclared',
@@ -120,15 +117,17 @@ const Dashboard = () => {
                     setPartners(mappedPartners);
                 }
 
-                const { data: messageData } = await supabase
+                const { data: rawMessageData } = await supabase
                     .from('messages')
                     .select('id, content, created_at, sender:profiles!messages_sender_id_fkey (full_name)')
                     .eq('receiver_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(3);
 
+                const messageData = rawMessageData as { id: string; content: string; created_at: string; sender?: { full_name?: string } }[] | null;
+
                 if (messageData) {
-                    const mappedActivities = messageData.map((m: any) => {
+                    const mappedActivities = messageData.map((m) => {
                         const diff = Math.floor((new Date().getTime() - new Date(m.created_at).getTime()) / 60000);
                         const timeStr = diff < 60 ? `${diff} MIN AGO` : diff < 1440 ? `${Math.floor(diff / 60)} HOURS AGO` : 'YESTERDAY';
                         return {
@@ -142,8 +141,7 @@ const Dashboard = () => {
                     setActivities(mappedActivities);
                 }
 
-            } catch (err) {
-                console.error("Error loading dashboard:", err);
+            } catch {
             } finally {
                 setLoading(false);
             }

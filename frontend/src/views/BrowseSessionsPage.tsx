@@ -13,9 +13,21 @@ export interface SessionJoinRequest {
     status: 'Pending' | 'Accepted' | 'Rejected';
 }
 
+interface SessionWithParticipants {
+    id: string;
+    title: string;
+    created_by: string;
+    max_members: number;
+    participants?: Array<{ profile_id: string }>;
+    scheduled_at: string;
+    duration_minutes: number;
+    meeting_link?: string | null;
+    host?: { full_name?: string; avatar_url?: string };
+}
+
 const BrowseSessions = () => {
     const navigate = useNavigate();
-    const [sessions, setSessions] = useState<any[]>([]);
+    const [sessions, setSessions] = useState<SessionWithParticipants[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserName, setCurrentUserName] = useState<string>('');
     const [sessionRequests, setSessionRequests] = useState<Record<string, SessionJoinRequest[]>>({});
@@ -65,8 +77,9 @@ const BrowseSessions = () => {
                 throw requestError;
             }
 
+            const typedRequestRows = requestRows as { id: string; session_id: string; requester_id: string; status: 'Pending' | 'Accepted' | 'Rejected'; created_at: string; requester?: { full_name?: string } }[] | null;
             const requestsBySession: Record<string, SessionJoinRequest[]> = {};
-            (requestRows || []).forEach((row: any) => {
+            (typedRequestRows || []).forEach((row) => {
                 const request = {
                     id: row.id,
                     sessionId: row.session_id,
@@ -83,7 +96,7 @@ const BrowseSessions = () => {
             });
 
             setSessionRequests(requestsBySession);
-        } catch (err: any) {
+        } catch {
         } finally {
             setLoading(false);
         }
@@ -112,7 +125,7 @@ const BrowseSessions = () => {
         };
     }, [currentUserId, fetchSessions]);
 
-    const handleRequestJoin = async (session: any) => {
+    const handleRequestJoin = async (session: SessionWithParticipants) => {
         if (!currentUserId) {
             navigate('/login');
             return;
@@ -146,14 +159,14 @@ const BrowseSessions = () => {
                 message: `${currentUserName} requested to join "${session.title}"`,
             });
             await fetchSessions();
-        } catch (err: any) {
-            alert(err.message || 'Failed to request this session.');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to request this session.');
         } finally {
             setBusyAction(null);
         }
     };
 
-    const handleAcceptRequest = async (session: any, request: SessionJoinRequest) => {
+    const handleAcceptRequest = async (session: SessionWithParticipants, request: SessionJoinRequest) => {
         if (!currentUserId || session.created_by !== currentUserId) return;
 
         const participantCount = session.participants?.length || 0;
@@ -192,8 +205,8 @@ const BrowseSessions = () => {
                 message: `Your request to join "${session.title}" was accepted`,
             });
             await fetchSessions();
-        } catch (err: any) {
-            alert(err.message || 'Failed to accept request.');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to accept request.');
         } finally {
             setBusyAction(null);
         }
@@ -221,17 +234,17 @@ const BrowseSessions = () => {
                 message: `Your request to join the session was rejected`,
             });
             await fetchSessions();
-        } catch (err: any) {
-            alert(err.message || 'Failed to reject request.');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to reject request.');
         } finally {
             setBusyAction(null);
         }
     };
 
-    const getRequestStatus = (session: any) => {
+    const getRequestStatus = (session: SessionWithParticipants) => {
         if (!currentUserId) return 'guest';
         if (session.created_by === currentUserId) return 'host';
-        if ((session.participants || []).some((participant: any) => participant.profile_id === currentUserId)) {
+        if ((session.participants || []).some((participant: { profile_id: string }) => participant.profile_id === currentUserId)) {
             return 'joined';
         }
         if ((sessionRequests[session.id] || []).some(request => request.requesterId === currentUserId)) {

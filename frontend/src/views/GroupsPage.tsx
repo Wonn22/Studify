@@ -5,6 +5,7 @@ import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
 import CreateGroupModal from '../components/CreateGroupModal';
 import { getCurrentSessionUser, getEffectiveGroupStatus } from '../security/dataAccess';
+import { GroupParticipant } from '../types';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
@@ -33,7 +34,7 @@ const GroupsPage = () => {
         return;
       }
 
-      let participantsData: any = [];
+      let participantsData: GroupParticipant[] = [];
       const { data: pData, error: pError } = await supabase
         .from('group_participants')
         .select('*');
@@ -44,8 +45,8 @@ const GroupsPage = () => {
 
       const myMemberships = new Set(
         participantsData
-          .filter((p: any) => p.profile_id === user.id)
-          .map((p: any) => p.group_id)
+          .filter((p: GroupParticipant) => p.profile_id === user.id)
+          .map((p: GroupParticipant) => p.group_id)
       );
 
       const fallbackImages = [
@@ -60,7 +61,7 @@ const GroupsPage = () => {
       const formattedGroups = (groupsData || []).map((g, index) => {
         const status = getEffectiveGroupStatus(g.status, g.deadline);
         const img = g.image_url || fallbackImages[index % fallbackImages.length];
-        const members = participantsData.filter((p: any) => p.group_id === g.id).length;
+        const members = participantsData.filter((p: GroupParticipant) => p.group_id === g.id).length;
         
         const description = g.description || '';
         const words = g.name.split(' ');

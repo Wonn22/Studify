@@ -20,13 +20,11 @@ export const getCurrentSessionUser = async () => {
   try {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
-      console.error('Session lookup failed:', error.message);
       return null;
     }
 
     return data.session?.user ?? null;
   } catch (error) {
-    console.error('Session lookup failed:', error);
     return null;
   }
 };
@@ -76,7 +74,6 @@ export const isGroupMember = async (groupId?: string | null, userId?: string | n
     .maybeSingle();
 
   if (error) {
-    console.error('Group membership check failed:', error.message);
     return false;
   }
 
@@ -102,7 +99,6 @@ export const getAcceptedFriendshipId = async (
     .maybeSingle();
 
   if (error) {
-    console.error('Friendship access check failed:', error.message);
     return null;
   }
 

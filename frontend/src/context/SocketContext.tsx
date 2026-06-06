@@ -54,17 +54,14 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
             });
 
             nextSocket.on('connect', () => {
-                console.log('[Socket.IO] Connected:', nextSocket.id);
                 if (isMounted) setConnected(true);
             });
 
             nextSocket.on('disconnect', () => {
-                console.log('[Socket.IO] Disconnected');
                 if (isMounted) setConnected(false);
             });
 
-            nextSocket.on('connect_error', (error) => {
-                console.error('[Socket.IO] Connection error:', error.message);
+            nextSocket.on('connect_error', () => {
                 if (isMounted) setConnected(false);
             });
 

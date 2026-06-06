@@ -9,13 +9,25 @@ interface SessionJoinRequest {
     status: 'Pending' | 'Accepted' | 'Rejected';
 }
 
+interface SessionWithDetails {
+    id: string;
+    title: string;
+    created_by: string;
+    max_members: number;
+    participants?: Array<{ profile_id: string }>;
+    scheduled_at: string;
+    duration_minutes: number;
+    meeting_link?: string | null;
+    host?: { full_name?: string; avatar_url?: string };
+}
+
 interface DiscoveryRoomCardProps {
-    session: any;
+    session: SessionWithDetails;
     requestStatus: string;
     pendingRequests: SessionJoinRequest[];
     busyAction: string | null;
-    onRequestJoin: (session: any) => void;
-    onAcceptRequest: (session: any, request: SessionJoinRequest) => void;
+    onRequestJoin: (session: SessionWithDetails) => void;
+    onAcceptRequest: (session: SessionWithDetails, request: SessionJoinRequest) => void;
     onRejectRequest: (request: SessionJoinRequest) => void;
 }
 
@@ -52,7 +64,7 @@ const DiscoveryRoomCard = ({
     const isFull = participantCount >= session.max_members;
     const isRequestBusy = busyAction === `request:${session.id}`;
 
-    const getAvatar = (url: string, name: string) =>
+    const getAvatar = (url: string | undefined, name: string | undefined) =>
         url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'Scholar')}`;
 
     const handleJoin = () => {

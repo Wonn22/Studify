@@ -38,7 +38,6 @@ const PartnerProfileModal = ({ partnerId, onClose }: Props) => {
                 if (error) throw error;
                 setPartner(data as PartnerProfile);
             } catch (err) {
-                console.error('Failed to load partner profile:', err);
             } finally {
                 setLoading(false);
             }
@@ -57,7 +56,6 @@ const PartnerProfileModal = ({ partnerId, onClose }: Props) => {
             });
             setConnectStatus('sent');
         } catch (err) {
-            console.error('Failed to send connect request:', err);
             setConnectStatus('idle');
         }
     };

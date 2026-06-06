@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
 import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, createNotification } from '../security/dataAccess';
+import { Friendship } from '../types';
 
 interface Profile {
   id: string;
@@ -53,9 +54,9 @@ const FindPage = () => {
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
 
       if (allProfiles) {
-        const mappedProfiles = allProfiles.map((p: any) => {
+        const mappedProfiles = allProfiles.map((p: Profile) => {
           const friendship = friendships?.find(
-            (f: any) => f.requester_id === p.id || f.addressee_id === p.id
+            (f: Friendship) => f.requester_id === p.id || f.addressee_id === p.id
           );
           return {
             ...p,

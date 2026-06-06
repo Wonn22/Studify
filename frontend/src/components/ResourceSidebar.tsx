@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
 import { getCurrentSessionUser, isGroupMember } from '../security/dataAccess';
+import { Resource } from '../types';
 
 const ResourceSidebar = ({ groupId }: { groupId?: string }) => {
-  const [resources, setResources] = useState<any[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
 
   useEffect(() => {
       const fetchResources = async () => {
@@ -51,7 +52,7 @@ const ResourceSidebar = ({ groupId }: { groupId?: string }) => {
   );
 };
 
-const ResourceItem = ({ name, type, info }: any) => (
+const ResourceItem = ({ name, type, info }: { name: string; type: string; info: string }) => (
   <li className="group cursor-pointer">
     <div className="flex items-start gap-3">
       <span className="material-symbols-outlined text-[#001F3F] p-2 bg-white rounded border border-slate-200 shadow-sm group-hover:bg-[#001F3F] group-hover:text-white transition-colors">

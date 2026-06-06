@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../database/database';
 
 const SideNavBar = ({ groupId, activeTab, setActiveTab }: { groupId?: string; activeTab?: string; setActiveTab?: (tab: string) => void }) => {
-  const [members, setMembers] = useState<any[]>([]);
+  const [members, setMembers] = useState<Array<{ id: string; name: string; avatar: string }>>([]);
 
   useEffect(() => {
     const fetchMembers = async () => {
         if (!groupId) return;
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('group_participants')
             .select('profile_id, profiles(full_name, avatar_url)')
             .eq('group_id', groupId);
@@ -18,8 +18,6 @@ const SideNavBar = ({ groupId, activeTab, setActiveTab }: { groupId?: string; ac
                 name: Array.isArray(d.profiles) ? d.profiles[0]?.full_name || 'Unknown' : (d.profiles as any)?.full_name || 'Unknown',
                 avatar: Array.isArray(d.profiles) ? d.profiles[0]?.avatar_url : (d.profiles as any)?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${d.profile_id}`
             })));
-        } else if (error) {
-            console.error("Error fetching members:", error);
         }
     };
     fetchMembers();
