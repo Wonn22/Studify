@@ -6,7 +6,7 @@ import KanbanBoard from '../components/KanbanBoard';
 import ResourceSidebar from '../components/ResourceSidebar';
 import DiscussionView from '../components/DiscussionView';
 import FilesView from '../components/FilesView';
-import { getCurrentSessionUser, isValidUuid } from '../security/dataAccess';
+import { getCurrentSessionUser, getEffectiveGroupStatus, isValidUuid } from '../security/dataAccess';
 
 const ProjectWorkspace = () => {
   const { groupId } = useParams();
@@ -17,6 +17,8 @@ const ProjectWorkspace = () => {
   const [isMember, setIsMember] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const effectiveStatus = getEffectiveGroupStatus(group?.status, group?.deadline);
+  const canPauseGroup = isMember && effectiveStatus !== 'Completed';
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -45,7 +47,15 @@ const ProjectWorkspace = () => {
         return;
       }
 
-      setGroup(data);
+      const effectiveStatus = getEffectiveGroupStatus(data.status, data.deadline);
+      setGroup({ ...data, status: effectiveStatus });
+
+      if (effectiveStatus === 'Completed' && data.status !== 'Completed') {
+        await supabase
+          .from('groups')
+          .update({ status: 'Completed' })
+          .eq('id', groupId);
+      }
 
       const user = await getCurrentSessionUser();
       if (!user) {
@@ -107,6 +117,25 @@ const ProjectWorkspace = () => {
     }
   };
 
+  const handleTogglePause = async () => {
+    if (!group || !canPauseGroup) return;
+
+    const nextStatus = effectiveStatus === 'Paused' ? 'Active Research' : 'Paused';
+    const { error } = await supabase
+      .from('groups')
+      .update({ status: nextStatus })
+      .eq('id', group.id);
+
+    if (error) {
+      console.error("Error updating group status:", error);
+      setLoadError(error.message || 'Unable to update group status.');
+      return;
+    }
+
+    setGroup((prev: any) => prev ? { ...prev, status: nextStatus } : prev);
+    setLoadError(null);
+  };
+
   if (isMember === null) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -140,7 +169,7 @@ const ProjectWorkspace = () => {
                 <span className="material-symbols-outlined text-4xl">group</span>
               </div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
-                {group?.description || group?.status || 'Academic Research'}
+                {group?.description || effectiveStatus || 'Academic Research'}
               </p>
               <h1 className="text-3xl font-extrabold tracking-tight text-[#001F3F] mb-4">
                 {group?.name || 'Loading Project...'}
@@ -170,9 +199,22 @@ const ProjectWorkspace = () => {
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 mb-2">
                   {group?.description || group?.status || 'Academic Research'}
                 </p>
-                <h1 className="text-5xl font-extrabold tracking-tighter text-[#001F3F] mb-6">
-                  {group?.name || 'Project Alpha'}
-                </h1>
+                <div className="flex items-start justify-between gap-4 mb-6">
+                  <h1 className="text-5xl font-extrabold tracking-tighter text-[#001F3F]">
+                    {group?.name || 'Project Alpha'}
+                  </h1>
+                  {canPauseGroup && (
+                    <button
+                      onClick={handleTogglePause}
+                      className="shrink-0 px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-bold text-[#001F3F] hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        {effectiveStatus === 'Paused' ? 'play_arrow' : 'pause'}
+                      </span>
+                      {effectiveStatus === 'Paused' ? 'Resume Group' : 'Pause Group'}
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex items-center gap-8 py-6 border-t border-b border-slate-200">
                   <div className="flex -space-x-3">
@@ -181,7 +223,7 @@ const ProjectWorkspace = () => {
                   <div className="h-6 w-[1px] bg-slate-200"></div>
                   <div className="flex items-center gap-6">
                     <MetaData label="Deadline" value={group?.deadline || 'No Deadline'} />
-                    <MetaData label="Status" value={group?.status || 'Active Research'} />
+                    <MetaData label="Status" value={effectiveStatus} />
                   </div>
                 </div>
               </header>

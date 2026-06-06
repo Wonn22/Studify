@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
 import CreateGroupModal from '../components/CreateGroupModal';
-import { getCurrentSessionUser } from '../security/dataAccess';
+import { getCurrentSessionUser, getEffectiveGroupStatus } from '../security/dataAccess';
 
 const GroupsPage = () => {
   const navigate = useNavigate();
@@ -52,7 +52,7 @@ const GroupsPage = () => {
       ];
 
       const formattedGroups = (groupsData || []).map((g, index) => {
-        const status = g.status || 'Active Research';
+        const status = getEffectiveGroupStatus(g.status, g.deadline);
         const img = g.image_url || fallbackImages[index % fallbackImages.length];
         const members = participantsData.filter((p: any) => p.group_id === g.id).length;
         

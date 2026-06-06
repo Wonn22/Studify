@@ -1,6 +1,7 @@
 import { supabase } from '../database/database';
 
 export type ResourceFileType = 'pdf' | 'xlsx' | 'docx' | 'link' | 'file';
+export type GroupStatus = 'Active Research' | 'Completed' | 'Paused';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
@@ -28,6 +29,23 @@ export const getCurrentSessionUser = async () => {
     console.error('Session lookup failed:', error);
     return null;
   }
+};
+
+export const getEffectiveGroupStatus = (
+  status?: string | null,
+  deadline?: string | null,
+): GroupStatus => {
+  if (deadline) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const deadlineDate = new Date(`${deadline}T00:00:00`);
+    if (!Number.isNaN(deadlineDate.getTime()) && deadlineDate < today) {
+      return 'Completed';
+    }
+  }
+
+  return status === 'Paused' || status === 'Completed' ? status : 'Active Research';
 };
 
 export const getUploadValidationError = (file: File) => {
