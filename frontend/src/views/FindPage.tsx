@@ -83,12 +83,15 @@ const FindPage = () => {
     if (error) {
       setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, friendship_status: null } : p));
     } else {
-      await createNotification({
+      const { error: notifError } = await createNotification({
         recipient_id: profileId,
         sender_id: currentUser.id,
         type: 'friend_request',
         message: `${currentUserName} sent you a friend request`,
       });
+      if (notifError) {
+        alert('Friend request sent, but notification failed: ' + notifError.message);
+      }
     }
   };
 

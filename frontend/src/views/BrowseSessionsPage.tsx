@@ -151,13 +151,16 @@ const BrowseSessions = () => {
             if (error) {
                 throw error;
             }
-            await createNotification({
+            const { error: notifError } = await createNotification({
                 recipient_id: session.created_by,
                 sender_id: currentUserId,
                 type: 'session_join_request',
                 reference_id: session.id,
                 message: `${currentUserName} requested to join "${session.title}"`,
             });
+            if (notifError) {
+                alert('Request sent, but notification failed: ' + notifError.message);
+            }
             await fetchSessions();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Failed to request this session.');
@@ -197,13 +200,16 @@ const BrowseSessions = () => {
             if (updateError) {
                 throw updateError;
             }
-            await createNotification({
+            const { error: notifError } = await createNotification({
                 recipient_id: request.requesterId,
                 sender_id: currentUserId,
                 type: 'session_join_accepted',
                 reference_id: session.id,
                 message: `Your request to join "${session.title}" was accepted`,
             });
+            if (notifError) {
+                alert('Accepted, but notification failed: ' + notifError.message);
+            }
             await fetchSessions();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Failed to accept request.');
@@ -226,13 +232,16 @@ const BrowseSessions = () => {
             if (error) {
                 throw error;
             }
-            await createNotification({
+            const { error: notifError } = await createNotification({
                 recipient_id: request.requesterId,
                 sender_id: currentUserId,
                 type: 'session_join_rejected',
                 reference_id: request.sessionId,
                 message: `Your request to join the session was rejected`,
             });
+            if (notifError) {
+                alert('Rejected, but notification failed: ' + notifError.message);
+            }
             await fetchSessions();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Failed to reject request.');

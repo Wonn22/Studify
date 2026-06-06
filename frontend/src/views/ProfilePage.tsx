@@ -391,12 +391,16 @@ const ProfilePage = () => {
             setToast('Failed to send request');
             setTimeout(() => setToast(null), 3000);
         } else {
-            await createNotification({
+            const { error: notifError } = await createNotification({
                 recipient_id: profile.id,
                 sender_id: currentUserId,
                 type: 'friend_request',
                 message: `${currentUserName} sent you a friend request`,
             });
+            if (notifError) {
+                setToast('Friend request sent, but notification failed');
+                setTimeout(() => setToast(null), 3000);
+            }
         }
     };
 

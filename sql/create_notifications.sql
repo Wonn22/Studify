@@ -1,12 +1,9 @@
 -- ============================================
--- P3-A: Notifications System
+-- P3-A: Notifications System (Safe for re-runs)
 -- ============================================
 
--- Drop existing table if re-running
-DROP TABLE IF EXISTS notifications CASCADE;
-
--- Create notifications table
-CREATE TABLE notifications (
+-- Create table only if it doesn't exist
+CREATE TABLE IF NOT EXISTS notifications (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recipient_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     sender_id       UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -38,7 +35,11 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type
 -- Enable RLS
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
--- Policies
+-- Policies (drop first to allow re-runs)
+DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
+DROP POLICY IF EXISTS "Authenticated users can insert notifications" ON notifications;
+
 CREATE POLICY "Users can view own notifications"
     ON notifications FOR SELECT
     TO authenticated
@@ -53,6 +54,21 @@ CREATE POLICY "Authenticated users can insert notifications"
     ON notifications FOR INSERT
     TO authenticated
     WITH CHECK (true);
+
+-- Add table to realtime publication so Supabase Realtime works
+-- (Required for live notification updates in Navbar)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = 'notifications'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+    END IF;
+END
+$$;
 
 -- Optional: auto-cleanup old read notifications after 90 days
 -- Uncomment if desired:

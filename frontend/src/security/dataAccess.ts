@@ -262,7 +262,8 @@ export const createNotification = async (notification: NotificationInsert) => {
     return { error: new Error('Invalid recipient ID') };
   }
 
-  return supabase.from('notifications').insert(notification);
+  const { data, error } = await supabase.from('notifications').insert(notification).select().single();
+  return { data, error };
 };
 
 export const isGroupAdmin = async (groupId?: string | null, userId?: string | null) => {

@@ -166,13 +166,16 @@ const ProjectWorkspace = () => {
       if (!error) {
         setHasPendingRequest(true);
         setLoadError(null);
-        await createNotification({
+        const { error: notifError } = await createNotification({
           recipient_id: group.created_by,
           sender_id: currentUser.id,
           type: 'session_join_request',
           reference_id: groupId,
           message: `${currentUserName} requested to join "${group.name}"`,
         });
+        if (notifError) {
+          setLoadError('Request sent, but notification failed: ' + notifError.message);
+        }
       } else {
         setLoadError(error.message || 'Unable to request to join this group.');
       }
@@ -228,13 +231,16 @@ const ProjectWorkspace = () => {
     if (!updateError) {
       setPendingRequests(prev => prev.filter(r => r.id !== request.id));
       setParticipantsCount(prev => prev + 1);
-      await createNotification({
+      const { error: notifError } = await createNotification({
         recipient_id: request.requester_id,
         sender_id: currentUser.id,
         type: 'session_join_accepted',
         reference_id: groupId,
         message: `Your request to join "${group?.name}" was accepted`,
       });
+      if (notifError) {
+        setLoadError('Accepted, but notification failed: ' + notifError.message);
+      }
     }
 
     setBusyAction(null);
@@ -251,13 +257,16 @@ const ProjectWorkspace = () => {
 
     if (!error) {
       setPendingRequests(prev => prev.filter(r => r.id !== request.id));
-      await createNotification({
+      const { error: notifError } = await createNotification({
         recipient_id: request.requester_id,
         sender_id: currentUser.id,
         type: 'session_join_rejected',
         reference_id: groupId,
         message: `Your request to join "${group?.name}" was rejected`,
       });
+      if (notifError) {
+        setLoadError('Rejected, but notification failed: ' + notifError.message);
+      }
     }
 
     setBusyAction(null);

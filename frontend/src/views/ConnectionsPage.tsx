@@ -155,12 +155,15 @@ const ConnectionsPage = () => {
       setFriends(prev => prev.filter(p => p.friendshipId !== item.friendshipId));
       setPendingIncoming(prev => [...prev, item]);
     } else {
-      await createNotification({
+      const { error: notifError } = await createNotification({
         recipient_id: item.profile.id,
         sender_id: currentUserId,
         type: 'friend_accepted',
         message: `${currentUserName} accepted your friend request`,
       });
+      if (notifError) {
+        alert('Friend accepted, but notification failed: ' + notifError.message);
+      }
     }
   };
 
