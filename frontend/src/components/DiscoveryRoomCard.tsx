@@ -141,6 +141,12 @@ const DiscoveryRoomCard = ({
                     )}
                 </div>
                 <div className="flex items-center gap-1 text-slate-500">
+                    <span className="material-symbols-outlined text-lg">calendar_today</span>
+                    <span className="text-xs font-bold">
+                        {new Date(session.scheduled_at).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </span>
+                </div>
+                <div className="flex items-center gap-1 text-slate-500">
                     <span className="material-symbols-outlined text-lg">schedule</span>
                     <span className="text-xs font-bold">
                         {new Date(session.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
