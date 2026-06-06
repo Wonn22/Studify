@@ -127,11 +127,11 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative"
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative max-h-[90vh] flex flex-col"
                 style={{ animation: 'modalIn 0.22s cubic-bezier(.4,0,.2,1)' }}
             >
-                <div className="flex items-center justify-between px-7 pt-7 pb-4">
-                    <h2 className="text-xl font-bold text-slate-900 font-headline">Start a New Study Session</h2>
+                <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
+                    <h2 className="text-lg font-bold text-slate-900 font-headline">Start a New Study Session</h2>
                     <button
                         onClick={onClose}
                         className="text-slate-400 hover:text-slate-700 transition-colors rounded-full p-1 hover:bg-slate-100"
@@ -141,14 +141,14 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                     </button>
                 </div>
 
-                <div className="px-7 pb-7 space-y-5">
+                <div className="px-6 pb-6 space-y-3.5 overflow-y-auto">
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Session Subject</label>
                         <div className="relative">
                             <select
                                 value={subject}
                                 onChange={e => setSubject(e.target.value)}
-                                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition pr-9"
+                                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition pr-9"
                             >
                                 {SUBJECTS.map(item => <option key={item} value={item}>{item}</option>)}
                             </select>
@@ -165,24 +165,24 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                             placeholder="e.g. Midterm Review Prep"
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
                         />
                     </div>
 
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
                         <textarea
-                            rows={3}
+                            rows={2}
                             placeholder="Add study goals, topics, or preparation notes..."
                             value={description}
                             onChange={e => setDescription(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition resize-none"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition resize-none"
                         />
                     </div>
 
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Capacity</label>
-                        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+                        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5">
                             <button
                                 onClick={() => clampCapacity(capacity - 1)}
                                 className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-600 transition font-bold text-lg"
@@ -208,7 +208,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                                 type="date"
                                 value={scheduledDate}
                                 onChange={e => setScheduledDate(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
                             />
                         </div>
                         <div>
@@ -217,7 +217,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                                 type="time"
                                 value={scheduledTime}
                                 onChange={e => setScheduledTime(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
                             />
                         </div>
                     </div>
@@ -247,7 +247,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                             placeholder="https://meet.google.com/... or https://zoom.us/j/..."
                             value={meetingLink}
                             onChange={e => setMeetingLink(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
                         />
                     </div>
 
@@ -258,7 +258,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                     <button
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="w-full bg-slate-950 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-[.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-slate-900/20"
+                        className="w-full bg-slate-950 text-white py-3 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-[.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-slate-900/20"
                     >
                         {loading ? 'Creating...' : 'Create Session'}
                     </button>
