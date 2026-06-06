@@ -34,7 +34,7 @@ const columns = [
   { title: 'Done', status: 'Done' },
 ];
 
-const KanbanBoard = ({ groupId }: { groupId?: string }) => {
+const KanbanBoard = ({ groupId, readOnly }: { groupId?: string; readOnly?: boolean }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -223,6 +223,7 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
+    if (readOnly) return;
     const { active, over } = event;
     if (!over) return;
 
@@ -314,6 +315,7 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
               onAddTask={handleAddTask}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -326,6 +328,7 @@ const KanbanBoard = ({ groupId }: { groupId?: string }) => {
                 members={members}
                 onUpdate={handleUpdateTask}
                 onDelete={handleDeleteTask}
+                readOnly={readOnly}
               />
             </div>
           ) : null}
@@ -346,6 +349,7 @@ interface KanbanColumnProps {
   onAddTask: (status: string) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
+  readOnly?: boolean;
 }
 
 const KanbanColumn = ({
@@ -359,6 +363,7 @@ const KanbanColumn = ({
   onAddTask,
   onUpdateTask,
   onDeleteTask,
+  readOnly,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.status });
 
@@ -382,15 +387,17 @@ const KanbanColumn = ({
             {tasks.length}
           </span>
         </h3>
-        <span
-          onClick={() => {
-            setIsAddingColumn(column.status);
-            setNewTaskTitle('');
-          }}
-          className="material-symbols-outlined text-slate-400 cursor-pointer hover:text-[#001F3F] transition-colors"
-        >
-          add
-        </span>
+        {!readOnly && (
+          <span
+            onClick={() => {
+              setIsAddingColumn(column.status);
+              setNewTaskTitle('');
+            }}
+            className="material-symbols-outlined text-slate-400 cursor-pointer hover:text-[#001F3F] transition-colors"
+          >
+            add
+          </span>
+        )}
       </div>
 
       <SortableContext
@@ -398,7 +405,7 @@ const KanbanColumn = ({
         strategy={verticalListSortingStrategy}
       >
         <div className="space-y-4 min-h-[80px]">
-          {isAddingColumn === column.status && (
+          {isAddingColumn === column.status && !readOnly && (
             <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
               <input
                 autoFocus
@@ -431,6 +438,7 @@ const KanbanColumn = ({
                 members={members}
                 onUpdate={onUpdateTask}
                 onDelete={onDeleteTask}
+                readOnly={readOnly}
               />
             ))
           )}

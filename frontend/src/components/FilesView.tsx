@@ -8,7 +8,7 @@ import {
     isGroupMember,
 } from '../security/dataAccess';
 
-const FilesView = ({ groupId }: { groupId?: string }) => {
+const FilesView = ({ groupId, readOnly }: { groupId?: string; readOnly?: boolean }) => {
     const [uploading, setUploading] = useState(false);
     const [files, setFiles] = useState<any[]>([]);
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -127,19 +127,21 @@ const FilesView = ({ groupId }: { groupId?: string }) => {
 
     return (
         <div className="flex-1 flex flex-col gap-6 mt-4 overflow-hidden">
-            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-[#001F3F] transition-colors relative">
-                <input
-                    type="file"
-                    onChange={handleUpload}
-                    disabled={uploading}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <span className="material-symbols-outlined text-4xl text-slate-400 mb-2">cloud_upload</span>
-                <p className="text-slate-600 font-medium">
-                    {uploading ? "Uploading Academic Asset..." : "Click or drag to upload research files"}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">PDF, DOCX, or XLSX (Max 10MB)</p>
-            </div>
+            {!readOnly && (
+                <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-[#001F3F] transition-colors relative">
+                    <input
+                        type="file"
+                        onChange={handleUpload}
+                        disabled={uploading}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <span className="material-symbols-outlined text-4xl text-slate-400 mb-2">cloud_upload</span>
+                    <p className="text-slate-600 font-medium">
+                        {uploading ? "Uploading Academic Asset..." : "Click or drag to upload research files"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">PDF, DOCX, or XLSX (Max 10MB)</p>
+                </div>
+            )}
 
             <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-y-auto">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white">

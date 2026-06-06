@@ -31,6 +31,7 @@ const ProjectWorkspace = () => {
   const [hasPendingRequest, setHasPendingRequest] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const effectiveStatus = getEffectiveGroupStatus(group?.status, group?.deadline);
+  const isReadOnly = effectiveStatus === 'Completed';
   const canPauseGroup = isAdmin && effectiveStatus !== 'Completed';
 
   const fetchGroupDetails = async () => {
@@ -366,6 +367,18 @@ const ProjectWorkspace = () => {
                     </span>
                   )}
                 </p>
+                {isReadOnly && (
+                  <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 flex items-center gap-2 text-emerald-700 text-sm font-semibold">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    This project is completed. View-only mode.
+                  </div>
+                )}
+                {effectiveStatus === 'Paused' && (
+                  <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 flex items-center gap-2 text-amber-700 text-sm font-semibold">
+                    <span className="material-symbols-outlined text-base">pause_circle</span>
+                    This project is paused.
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-4 mb-6">
                   <h1 className="text-5xl font-extrabold tracking-tighter text-[#001F3F]">
                     {group?.name || 'Project Alpha'}
@@ -439,11 +452,11 @@ const ProjectWorkspace = () => {
 
               {activeTab === 'Board' && (
                 <div className="flex-1 overflow-y-auto min-h-0 pr-4 pb-10">
-                  <KanbanBoard groupId={groupId} />
+                  <KanbanBoard groupId={groupId} readOnly={isReadOnly} />
                 </div>
               )}
-              {activeTab === 'Discussion' && <DiscussionView groupId={groupId} />}
-              {activeTab === 'Files' && <FilesView groupId={groupId} />}
+              {activeTab === 'Discussion' && <DiscussionView groupId={groupId} readOnly={isReadOnly} />}
+              {activeTab === 'Files' && <FilesView groupId={groupId} readOnly={isReadOnly} />}
             </main>
 
             <ResourceSidebar groupId={groupId} />

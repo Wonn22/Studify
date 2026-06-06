@@ -12,6 +12,7 @@ const GroupsPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("All Statuses");
+  const [showCompleted, setShowCompleted] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -89,9 +90,13 @@ const GroupsPage = () => {
     fetchGroups();
   }, [navigate]);
 
+  const visibleGroups = showCompleted
+    ? groups
+    : groups.filter(g => g.status !== 'Completed');
+
   const filteredGroups = activeFilter === "All Statuses"
-    ? groups 
-    : groups.filter(g => g.status === activeFilter);
+    ? visibleGroups
+    : visibleGroups.filter(g => g.status === activeFilter);
 
   const dynamicStatuses = ["All Statuses", ...Array.from(new Set(groups.map(g => g.status)))];
 
@@ -128,7 +133,7 @@ const GroupsPage = () => {
                       onClick={() => setActiveFilter(status as string)}
                       className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                         activeFilter === status
-                        ? 'bg-[#001F3F] text-white' 
+                        ? 'bg-[#001F3F] text-white'
                         : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
                       }`}
                     >
@@ -136,6 +141,17 @@ const GroupsPage = () => {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-surface-container-high">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCompleted}
+                    onChange={(e) => setShowCompleted(e.target.checked)}
+                    className="w-4 h-4 accent-[#001F3F]"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Show Completed Groups</span>
+                </label>
               </div>
             </div>
 

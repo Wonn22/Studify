@@ -19,7 +19,7 @@ interface SocketAck {
   error?: string;
 }
 
-const DiscussionView = ({ groupId }: { groupId?: string }) => {
+const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: boolean }) => {
   const { socket } = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -321,61 +321,63 @@ const DiscussionView = ({ groupId }: { groupId?: string }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-white border-t border-slate-100 shrink-0 relative">
-        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2 pr-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="material-symbols-outlined p-2 text-slate-400 hover:text-[#001F3F] transition-colors"
-          >
-            attach_file
-          </button>
-          <input
-            type="text"
-            className="flex-1 bg-transparent border-none text-sm text-slate-800 focus:ring-0 placeholder:text-slate-400 px-2 outline-none"
-            placeholder="Type a message..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          />
-          <div className="relative">
+      {!readOnly && (
+        <div className="p-4 bg-white border-t border-slate-100 shrink-0 relative">
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-2 pr-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <button
-              onClick={() => setShowEmojis(!showEmojis)}
-              className="material-symbols-outlined p-2 text-slate-400 hover:text-[#001F3F] transition-colors flex items-center justify-center"
+              onClick={() => fileInputRef.current?.click()}
+              className="material-symbols-outlined p-2 text-slate-400 hover:text-[#001F3F] transition-colors"
             >
-              sentiment_satisfied
+              attach_file
             </button>
-            {showEmojis && (
-              <div className="absolute bottom-12 right-0 bg-white shadow-xl rounded-xl p-3 grid grid-cols-4 gap-2 border border-slate-100 w-48 z-10">
-                {emojis.map(emoji => (
-                  <button
-                    key={emoji}
-                    onClick={() => {
-                      setNewMessage(prev => prev + emoji);
-                      setShowEmojis(false);
-                    }}
-                    className="text-2xl hover:bg-slate-100 p-2 rounded-lg transition-colors flex items-center justify-center"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
+            <input
+              type="text"
+              className="flex-1 bg-transparent border-none text-sm text-slate-800 focus:ring-0 placeholder:text-slate-400 px-2 outline-none"
+              placeholder="Type a message..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            />
+            <div className="relative">
+              <button
+                onClick={() => setShowEmojis(!showEmojis)}
+                className="material-symbols-outlined p-2 text-slate-400 hover:text-[#001F3F] transition-colors flex items-center justify-center"
+              >
+                sentiment_satisfied
+              </button>
+              {showEmojis && (
+                <div className="absolute bottom-12 right-0 bg-white shadow-xl rounded-xl p-3 grid grid-cols-4 gap-2 border border-slate-100 w-48 z-10">
+                  {emojis.map(emoji => (
+                    <button
+                      key={emoji}
+                      onClick={() => {
+                        setNewMessage(prev => prev + emoji);
+                        setShowEmojis(false);
+                      }}
+                      className="text-2xl hover:bg-slate-100 p-2 rounded-lg transition-colors flex items-center justify-center"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleSendMessage}
+              disabled={!newMessage.trim()}
+              className="w-10 h-10 bg-[#001F3F] text-white rounded-lg flex items-center justify-center hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:scale-95"
+            >
+              <span className="material-symbols-outlined">send</span>
+            </button>
           </div>
-          <button
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
-            className="w-10 h-10 bg-[#001F3F] text-white rounded-lg flex items-center justify-center hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm active:scale-95"
-          >
-            <span className="material-symbols-outlined">send</span>
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };

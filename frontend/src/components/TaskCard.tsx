@@ -21,9 +21,10 @@ interface TaskCardProps {
   members: Member[];
   onUpdate: (id: string, updates: Partial<Task>) => void;
   onDelete: (id: string) => void;
+  readOnly?: boolean;
 }
 
-const TaskCard = ({ task, members, onUpdate, onDelete }: TaskCardProps) => {
+const TaskCard = ({ task, members, onUpdate, onDelete, readOnly }: TaskCardProps) => {
   const {
     attributes,
     listeners,
@@ -87,47 +88,49 @@ const TaskCard = ({ task, members, onUpdate, onDelete }: TaskCardProps) => {
           {task.category || 'Task'}
         </span>
 
-        <div className="flex items-center gap-1">
-          {!isConfirmingDelete ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsConfirmingDelete(true);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-              title="Delete task"
-            >
-              <span className="material-symbols-outlined text-sm">delete</span>
-            </button>
-          ) : (
-            <div className="flex gap-1">
+        {!readOnly && (
+          <div className="flex items-center gap-1">
+            {!isConfirmingDelete ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsConfirmingDelete(false);
+                  setIsConfirmingDelete(true);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                title="Delete task"
               >
-                Cancel
+                <span className="material-symbols-outlined text-sm">delete</span>
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(task.id);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="text-[10px] font-bold px-2 py-1 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="flex gap-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsConfirmingDelete(false);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(task.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {isEditing ? (
+      {isEditing && !readOnly ? (
         <input
           autoFocus
           type="text"
@@ -143,10 +146,10 @@ const TaskCard = ({ task, members, onUpdate, onDelete }: TaskCardProps) => {
         <h4
           onClick={(e) => {
             e.stopPropagation();
-            setIsEditing(true);
+            if (!readOnly) setIsEditing(true);
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          className={`font-bold text-sm text-[#001F3F] mb-3 leading-snug cursor-text hover:text-blue-700 transition-colors ${
+          className={`font-bold text-sm text-[#001F3F] mb-3 leading-snug ${readOnly ? '' : 'cursor-text hover:text-blue-700 transition-colors'} ${
             task.status === 'Done' ? 'line-through text-slate-500' : ''
           }`}
         >
@@ -156,19 +159,21 @@ const TaskCard = ({ task, members, onUpdate, onDelete }: TaskCardProps) => {
 
       <div className="flex items-center justify-between">
         <div className="relative" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-          <select
-            value={task.assignee_id || ''}
-            onChange={handleAssigneeChange}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          >
-            <option value="">Unassigned</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+          {!readOnly && (
+            <select
+              value={task.assignee_id || ''}
+              onChange={handleAssigneeChange}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
           {assignee ? (
             <img
               className="w-6 h-6 rounded-full bg-slate-200 object-cover border border-slate-100"
