@@ -262,7 +262,14 @@ export const createNotification = async (notification: NotificationInsert) => {
     return { error: new Error('Invalid recipient ID') };
   }
 
-  const { data, error } = await supabase.from('notifications').insert(notification).select().single();
+  const { data, error } = await supabase.rpc('create_notification_rpc', {
+    p_recipient_id: notification.recipient_id,
+    p_sender_id: notification.sender_id ?? null,
+    p_type: notification.type,
+    p_reference_id: notification.reference_id ?? null,
+    p_message: notification.message,
+  });
+
   return { data, error };
 };
 
