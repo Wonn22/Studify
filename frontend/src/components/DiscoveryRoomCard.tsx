@@ -56,6 +56,7 @@ const DiscoveryRoomCard = ({
         url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'Scholar')}`;
 
     const handleJoin = () => {
+        console.log('[DiscoveryRoomCard] handleJoin — isJoined:', isJoined, 'isLive:', isLive, 'hasMeetingLink:', !!session.meeting_link, 'sessionId:', session?.id);
         if (!isJoined) {
             onRequestJoin(session);
             return;
@@ -63,10 +64,12 @@ const DiscoveryRoomCard = ({
 
         if (isLive) {
             if (session.meeting_link) {
+                console.log('[DiscoveryRoomCard] opening meeting link:', session.meeting_link);
                 window.open(session.meeting_link, '_blank', 'noopener,noreferrer');
                 return;
             }
 
+            console.warn('[DiscoveryRoomCard] no meeting link for live session:', session?.id);
             alert('Meeting link is not available for this session.');
         } else {
             setShowPopup(true);
@@ -74,12 +77,16 @@ const DiscoveryRoomCard = ({
     };
 
     const getButtonLabel = () => {
-        if (isHost) return isLive ? 'Open Host Room' : 'Host Session';
-        if (isJoined) return isLive ? 'Join Live Session' : 'Join Session';
-        if (isPending) return 'Request Pending';
-        if (isFull) return 'Session Full';
-        if (isRequestBusy) return 'Requesting...';
-        return 'Request to Join';
+        const label = (() => {
+            if (isHost) return isLive ? 'Open Host Room' : 'Host Session';
+            if (isJoined) return isLive ? 'Join Live Session' : 'Join Session';
+            if (isPending) return 'Request Pending';
+            if (isFull) return 'Session Full';
+            if (isRequestBusy) return 'Requesting...';
+            return 'Request to Join';
+        })();
+        console.log('[DiscoveryRoomCard] getButtonLabel —', label, '| isHost:', isHost, 'isJoined:', isJoined, 'isPending:', isPending, 'isFull:', isFull, 'isRequestBusy:', isRequestBusy);
+        return label;
     };
 
     const buttonDisabled = isPending || isFull || isRequestBusy;

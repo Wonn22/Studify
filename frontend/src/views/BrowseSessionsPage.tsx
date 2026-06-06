@@ -45,6 +45,7 @@ const BrowseSessions = () => {
             if (error) throw error;
 
             setSessions(data || []);
+            console.log('[BrowseSessions] fetched sessions:', data?.length || 0, 'for user:', user.id);
 
             const { data: requestRows, error: requestError } = await supabase
                 .from('session_join_requests')
@@ -59,7 +60,11 @@ const BrowseSessions = () => {
                 .eq('status', 'Pending')
                 .or(`requester_id.eq.${user.id},host_id.eq.${user.id}`);
 
-            if (requestError) throw requestError;
+            if (requestError) {
+                console.error('[BrowseSessions] request fetch error:', requestError.message, requestError.details);
+                throw requestError;
+            }
+            console.log('[BrowseSessions] fetched request rows:', requestRows?.length || 0);
 
             const requestsBySession: Record<string, SessionJoinRequest[]> = {};
             (requestRows || []).forEach((row: any) => {
@@ -79,8 +84,8 @@ const BrowseSessions = () => {
             });
 
             setSessionRequests(requestsBySession);
-        } catch (err) {
-            console.error('Error fetching discovery rooms:', err);
+        } catch (err: any) {
+            console.error('[BrowseSessions] fetchSessions error:', err?.message || err);
         } finally {
             setLoading(false);
         }
@@ -103,6 +108,7 @@ const BrowseSessions = () => {
         }
 
         setBusyAction(`request:${session.id}`);
+        console.log('[BrowseSessions] handleRequestJoin — sessionId:', session.id, 'requesterId:', currentUserId);
         try {
             const { error } = await supabase
                 .from('session_join_requests')
@@ -113,9 +119,14 @@ const BrowseSessions = () => {
                     status: 'Pending',
                 }, { onConflict: 'session_id,requester_id' });
 
-            if (error) throw error;
+            if (error) {
+                console.error('[BrowseSessions] handleRequestJoin insert error:', error.message, error.details);
+                throw error;
+            }
+            console.log('[BrowseSessions] handleRequestJoin — success');
             await fetchSessions();
         } catch (err: any) {
+            console.error('[BrowseSessions] handleRequestJoin catch:', err?.message || err);
             alert(err.message || 'Failed to request this session.');
         } finally {
             setBusyAction(null);
@@ -132,6 +143,7 @@ const BrowseSessions = () => {
         }
 
         setBusyAction(`accept:${request.id}`);
+        console.log('[BrowseSessions] handleAcceptRequest — requestId:', request.id, 'sessionId:', session.id, 'requesterId:', request.requesterId);
         try {
             const { error: participantError } = await supabase
                 .from('session_participants')
@@ -140,7 +152,11 @@ const BrowseSessions = () => {
                     profile_id: request.requesterId,
                 }, { onConflict: 'session_id,profile_id' });
 
-            if (participantError) throw participantError;
+            if (participantError) {
+                console.error('[BrowseSessions] handleAcceptRequest participant upsert error:', participantError.message);
+                throw participantError;
+            }
+            console.log('[BrowseSessions] handleAcceptRequest — participant upsert success');
 
             const { error: updateError } = await supabase
                 .from('session_join_requests')
@@ -148,9 +164,14 @@ const BrowseSessions = () => {
                 .eq('id', request.id)
                 .eq('host_id', currentUserId);
 
-            if (updateError) throw updateError;
+            if (updateError) {
+                console.error('[BrowseSessions] handleAcceptRequest status update error:', updateError.message);
+                throw updateError;
+            }
+            console.log('[BrowseSessions] handleAcceptRequest — status update success');
             await fetchSessions();
         } catch (err: any) {
+            console.error('[BrowseSessions] handleAcceptRequest catch:', err?.message || err);
             alert(err.message || 'Failed to accept request.');
         } finally {
             setBusyAction(null);
@@ -161,6 +182,7 @@ const BrowseSessions = () => {
         if (!currentUserId) return;
 
         setBusyAction(`reject:${request.id}`);
+        console.log('[BrowseSessions] handleRejectRequest — requestId:', request.id, 'hostId:', currentUserId);
         try {
             const { error } = await supabase
                 .from('session_join_requests')
@@ -168,9 +190,14 @@ const BrowseSessions = () => {
                 .eq('id', request.id)
                 .eq('host_id', currentUserId);
 
-            if (error) throw error;
+            if (error) {
+                console.error('[BrowseSessions] handleRejectRequest update error:', error.message);
+                throw error;
+            }
+            console.log('[BrowseSessions] handleRejectRequest — success');
             await fetchSessions();
         } catch (err: any) {
+            console.error('[BrowseSessions] handleRejectRequest catch:', err?.message || err);
             alert(err.message || 'Failed to reject request.');
         } finally {
             setBusyAction(null);
