@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS notifications (
         'session_join_rejected',
         'task_assigned'
     )),
-    reference_id    UUID,                -- links to the related entity (friendship, session, task)
+    reference_id    UUID,
     message         TEXT NOT NULL,
     is_read         BOOLEAN DEFAULT FALSE,
     created_at      TIMESTAMPTZ DEFAULT now()
@@ -35,28 +35,33 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type
 -- Enable RLS
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
--- Policies (drop first to allow re-runs)
+-- Drop ALL existing policies first to ensure clean state
 DROP POLICY IF EXISTS "Users can view own notifications" ON notifications;
 DROP POLICY IF EXISTS "Users can update own notifications" ON notifications;
 DROP POLICY IF EXISTS "Authenticated users can insert notifications" ON notifications;
+DROP POLICY IF EXISTS "Allow authenticated inserts to notifications" ON notifications;
+DROP POLICY IF EXISTS "Allow inserts to notifications" ON notifications;
 
+-- SELECT: users can only read their own notifications
 CREATE POLICY "Users can view own notifications"
     ON notifications FOR SELECT
     TO authenticated
     USING (recipient_id = auth.uid());
 
+-- UPDATE: users can only mark their own notifications as read
 CREATE POLICY "Users can update own notifications"
     ON notifications FOR UPDATE
     TO authenticated
     USING (recipient_id = auth.uid());
 
-CREATE POLICY "Authenticated users can insert notifications"
+-- INSERT: any authenticated user can create notifications
+-- Using auth.uid() IS NOT NULL instead of true, to ensure a valid session exists
+-- and to avoid role-name mismatches between 'authenticated' vs other roles
+CREATE POLICY "Allow inserts to notifications"
     ON notifications FOR INSERT
-    TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Add table to realtime publication so Supabase Realtime works
--- (Required for live notification updates in Navbar)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -69,8 +74,3 @@ BEGIN
     END IF;
 END
 $$;
-
--- Optional: auto-cleanup old read notifications after 90 days
--- Uncomment if desired:
--- SELECT cron.schedule('cleanup-old-notifications', '0 0 * * *',
---     $$ DELETE FROM notifications WHERE is_read = TRUE AND created_at < now() - interval '90 days' $$);
