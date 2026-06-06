@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../database/database';
+import { getCurrentSessionUser, isHttpUrl } from '../security/dataAccess';
 
 interface CreateSessionModalProps {
     onClose: () => void;
@@ -27,8 +28,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
     const [subject, setSubject] = useState(SUBJECTS[0]);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [sessionType, setSessionType] = useState<'focus' | 'collaborative'>('focus');
-    const [participants, setParticipants] = useState(1);
+    const [capacity, setCapacity] = useState(4);
     const [scheduledDate, setScheduledDate] = useState('');
     const [scheduledTime, setScheduledTime] = useState('');
     const [durationMinutes, setDurationMinutes] = useState(60);
@@ -38,14 +38,15 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
 
     useEffect(() => {
         const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10);
-        const timeStr = now.toTimeString().slice(0, 5);
-        setScheduledDate(dateStr);
-        setScheduledTime(timeStr);
+        setScheduledDate(now.toISOString().slice(0, 10));
+        setScheduledTime(now.toTimeString().slice(0, 5));
     }, []);
 
     const handleSubmit = async () => {
-        if (!title.trim()) {
+        const trimmedTitle = title.trim();
+        const trimmedMeetingLink = meetingLink.trim();
+
+        if (!trimmedTitle) {
             setError('Session title is required.');
             return;
         }
@@ -53,12 +54,20 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
             setError('Please set a date and time.');
             return;
         }
+        if (!trimmedMeetingLink) {
+            setError('Meeting link is required.');
+            return;
+        }
+        if (!isHttpUrl(trimmedMeetingLink)) {
+            setError('Meeting link must be a valid http or https URL.');
+            return;
+        }
 
         setError('');
         setLoading(true);
 
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getCurrentSessionUser();
             if (!user) throw new Error('Not authenticated');
 
             const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
@@ -66,13 +75,13 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
             const { data: newSession, error: insertError } = await supabase
                 .from('sessions')
                 .insert({
-                    title: title.trim(),
+                    title: trimmedTitle,
                     subject,
                     description: description.trim() || null,
                     scheduled_at: scheduledAt,
                     duration_minutes: durationMinutes,
-                    max_members: sessionType === 'focus' ? 1 : participants,
-                    meeting_link: meetingLink.trim() || null,
+                    max_members: capacity,
+                    meeting_link: trimmedMeetingLink,
                     created_by: user.id,
                 })
                 .select('id')
@@ -99,8 +108,8 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
         }
     };
 
-    const clampParticipants = (val: number) => {
-        setParticipants(Math.max(1, Math.min(20, val)));
+    const clampCapacity = (value: number) => {
+        setCapacity(Math.max(2, Math.min(20, value)));
     };
 
     return (
@@ -120,7 +129,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         className="text-slate-400 hover:text-slate-700 transition-colors rounded-full p-1 hover:bg-slate-100"
                         aria-label="Close"
                     >
-                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+                        <span className="material-symbols-outlined text-lg">close</span>
                     </button>
                 </div>
 
@@ -133,10 +142,10 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                                 onChange={e => setSubject(e.target.value)}
                                 className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition pr-9"
                             >
-                                {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                                {SUBJECTS.map(item => <option key={item} value={item}>{item}</option>)}
                             </select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6"/></svg>
+                            <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">
+                                expand_more
                             </span>
                         </div>
                     </div>
@@ -164,61 +173,25 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Session Type</label>
-                        <div className="grid grid-cols-2 gap-3">
-                            {/* Focus */}
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Capacity</label>
+                        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
                             <button
-                                onClick={() => setSessionType('focus')}
-                                className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl border-2 font-semibold text-sm transition-all duration-150
-                                    ${sessionType === 'focus'
-                                        ? 'border-slate-900 bg-white text-slate-900 shadow-md shadow-slate-900/10'
-                                        : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300'
-                                    }`}
+                                onClick={() => clampCapacity(capacity - 1)}
+                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-600 transition font-bold text-lg"
+                                aria-label="Decrease capacity"
                             >
-                                <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                                    <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
-                                    <circle cx="12" cy="12" r="10.5" stroke="currentColor" strokeWidth="1" opacity=".4"/>
-                                </svg>
-                                Focus
+                                -
                             </button>
-                            {/* Collaborative */}
+                            <span className="text-slate-900 font-bold text-base min-w-20 text-center">{capacity} seats</span>
                             <button
-                                onClick={() => setSessionType('collaborative')}
-                                className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl border-2 font-semibold text-sm transition-all duration-150
-                                    ${sessionType === 'collaborative'
-                                        ? 'border-slate-900 bg-white text-slate-900 shadow-md shadow-slate-900/10'
-                                        : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-slate-300'
-                                    }`}
+                                onClick={() => clampCapacity(capacity + 1)}
+                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-600 transition font-bold text-lg"
+                                aria-label="Increase capacity"
                             >
-                                <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                                    <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.8"/>
-                                    <circle cx="16" cy="8" r="3" stroke="currentColor" strokeWidth="1.8"/>
-                                    <path stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" d="M3 20c0-3.314 2.239-6 5-6h8c2.761 0 5 2.686 5 6"/>
-                                </svg>
-                                Collaborative
+                                +
                             </button>
                         </div>
                     </div>
-
-                    {sessionType === 'collaborative' && (
-                        <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Participants</label>
-                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
-                                <button
-                                    onClick={() => clampParticipants(participants - 1)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-600 transition font-bold text-lg"
-                                    aria-label="Decrease"
-                                >−</button>
-                                <span className="text-slate-900 font-bold text-base w-8 text-center">{participants}</span>
-                                <button
-                                    onClick={() => clampParticipants(participants + 1)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-600 transition font-bold text-lg"
-                                    aria-label="Increase"
-                                >+</button>
-                            </div>
-                        </div>
-                    )}
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -243,7 +216,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
 
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                            Duration — {durationMinutes} min
+                            Duration - {durationMinutes} min
                         </label>
                         <input
                             type="range"
@@ -260,10 +233,10 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                     </div>
 
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Meeting Link <span className="normal-case font-normal">(optional)</span></label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Meeting Link</label>
                         <input
                             type="url"
-                            placeholder="https://meet.google.com/..."
+                            placeholder="https://meet.google.com/... or https://zoom.us/j/..."
                             value={meetingLink}
                             onChange={e => setMeetingLink(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900/40 transition"
@@ -279,15 +252,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
                         disabled={loading}
                         className="w-full bg-slate-950 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-slate-800 active:scale-[.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-slate-900/20"
                     >
-                        {loading ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                                </svg>
-                                Creating…
-                            </span>
-                        ) : 'Create Session'}
+                        {loading ? 'Creating...' : 'Create Session'}
                     </button>
                 </div>
             </div>
@@ -295,7 +260,7 @@ const CreateSessionModal = ({ onClose, onSessionCreated }: CreateSessionModalPro
             <style>{`
                 @keyframes modalIn {
                     from { opacity: 0; transform: scale(0.95) translateY(12px); }
-                    to   { opacity: 1; transform: scale(1)    translateY(0); }
+                    to { opacity: 1; transform: scale(1) translateY(0); }
                 }
             `}</style>
         </div>

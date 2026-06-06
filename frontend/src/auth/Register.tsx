@@ -61,7 +61,6 @@ export default function Register() {
                 }
             }
 
-            // Sign out the auto-created session so user must log in manually
             await supabase.auth.signOut();
             navigate('/login', { replace: true });
         } catch (err: any) {

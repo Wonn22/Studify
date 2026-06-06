@@ -10,7 +10,6 @@ const StatsCard = ({ totalStudyTime, consistencyPercent }: StatsProps) => {
                 consistencyPercent === 0 ? 'No sessions yet' :
                     `Keep it up!`;
 
-    // Calculate a rough consistencyDays equivalent for the progress bar dots
     const consistencyDays = Math.round((consistencyPercent / 100) * 7);
 
     return (

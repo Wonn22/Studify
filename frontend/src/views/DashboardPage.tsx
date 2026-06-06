@@ -10,6 +10,7 @@ import ActivityFeed from '../components/MessagesFeed';
 import CalendarModal from '../components/CalendarModal';
 import PartnerProfileModal from '../components/PartnerProfileModal';
 import CreateSessionModal from '../components/CreateSessionModal';
+import { getCurrentSessionUser } from '../security/dataAccess';
 
 interface Profile {
     id: string;
@@ -36,9 +37,9 @@ const Dashboard = () => {
             try {
                 setLoading(true);
 
-                const { data: { user }, error: userError } = await supabase.auth.getUser();
+                const user = await getCurrentSessionUser();
 
-                if (!user || userError) {
+                if (!user) {
                     navigate('/login');
                     return;
                 }

@@ -223,7 +223,6 @@ const ShareModal = ({ profile, onClose }: { profile: UserProfile; onClose: () =>
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
         >
             <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ animation: 'modal-in 0.2s ease-out' }}>
-                {/* Header */}
                 <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
                     <div>
                         <p className="text-[0.65rem] font-bold tracking-[0.2em] text-primary-container uppercase mb-1">Portfolio</p>
@@ -234,7 +233,6 @@ const ShareModal = ({ profile, onClose }: { profile: UserProfile; onClose: () =>
                     </button>
                 </div>
 
-                {/* Preview Card */}
                 <div className="mx-6 mt-6 rounded-xl border border-slate-100 overflow-hidden shadow-md">
                     <div className="bg-primary-container px-6 pt-6 pb-10 relative">
                         <div className="text-white/60 text-[0.6rem] font-bold tracking-[0.25em] uppercase mb-4">Studify · Academic Profile</div>
@@ -266,14 +264,12 @@ const ShareModal = ({ profile, onClose }: { profile: UserProfile; onClose: () =>
                             <span className="text-slate-400 text-xs italic">No skills listed</span>
                         )}
                     </div>
-                    {/* URL bar */}
                     <div className="px-6 py-3 border-t border-slate-100 flex items-center gap-2 bg-white">
                         <span className="material-symbols-outlined text-slate-300 text-sm">link</span>
                         <span className="text-xs text-slate-400 truncate flex-1 font-mono">{profileUrl}</span>
                     </div>
                 </div>
 
-                {/* Actions */}
                 <div className="px-6 py-6 space-y-3">
                     <button
                         onClick={copyLink}
@@ -302,7 +298,6 @@ const ShareModal = ({ profile, onClose }: { profile: UserProfile; onClose: () =>
     );
 };
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 const ProfilePage = () => {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -355,17 +350,14 @@ const ProfilePage = () => {
 
     return (
         <div className="bg-surface text-on-surface antialiased min-h-screen flex flex-col font-body">
-            {/* Toast */}
             {toast && (
                 <div className="fixed top-6 left-1/2 z-[100] bg-primary-container text-white px-6 py-3 rounded-xl shadow-xl flex items-center gap-2 text-sm font-semibold" style={{ animation: 'toast-in 0.25s ease-out', transform: 'translateX(-50%)' }}>
                     <span className="material-symbols-outlined text-base">check_circle</span>{toast}
                 </div>
             )}
-            {/* Edit Modal */}
             {showEdit && profile && (
                 <EditModal profile={profile} onClose={() => setShowEdit(false)} onSaved={handleSaved} />
             )}
-            {/* Share Modal */}
             {showShare && profile && (
                 <ShareModal profile={profile} onClose={() => setShowShare(false)} />
             )}
