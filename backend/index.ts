@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
@@ -92,6 +92,39 @@ const createUserScopedClient = (accessToken: string) =>
         },
     });
 
+/* ─────────────── Rate Limiter ─────────────── */
+
+class RateLimiter {
+    private map = new Map<string, { count: number; resetAt: number }>();
+
+    check(key: string, limit: number, windowMs: number): boolean {
+        const now = Date.now();
+        const entry = this.map.get(key);
+        if (!entry || now > entry.resetAt) {
+            this.map.set(key, { count: 1, resetAt: now + windowMs });
+            return true;
+        }
+        if (entry.count >= limit) {
+            return false;
+        }
+        entry.count++;
+        return true;
+    }
+
+    cleanup() {
+        const now = Date.now();
+        for (const [key, entry] of this.map.entries()) {
+            if (now > entry.resetAt) {
+                this.map.delete(key);
+            }
+        }
+    }
+}
+
+const messageRateLimiter = new RateLimiter();
+
+/* ─────────────── Helpers ─────────────── */
+
 const isAcceptedFriend = async (client: SupabaseClient, userId: string, contactId: string) => {
     if (!isValidUuid(userId) || !isValidUuid(contactId) || userId === contactId) return false;
 
@@ -106,7 +139,6 @@ const isAcceptedFriend = async (client: SupabaseClient, userId: string, contactI
         .maybeSingle();
 
     if (error) {
-        console.error('[WS] Friendship check failed:', error.message);
         return false;
     }
 
@@ -124,7 +156,6 @@ const isGroupMember = async (client: SupabaseClient, userId: string, groupId: st
         .maybeSingle();
 
     if (error) {
-        console.error('[WS] Group membership check failed:', error.message);
         return false;
     }
 
@@ -154,7 +185,6 @@ const findPersistedDirectMessage = async (
         .maybeSingle();
 
     if (error) {
-        console.error('[WS] Direct message lookup failed:', error.message);
         return null;
     }
 
@@ -184,11 +214,27 @@ const findPersistedGroupMessage = async (
         .maybeSingle();
 
     if (error) {
-        console.error('[WS] Group message lookup failed:', error.message);
         return null;
     }
 
     return data as GroupMessage | null;
+};
+
+const fetchSenderProfile = async (client: SupabaseClient, userId: string) => {
+    const { data, error } = await client
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', userId)
+        .single();
+
+    if (error || !data) {
+        return { full_name: 'Unknown', avatar_url: '' };
+    }
+
+    return {
+        full_name: data.full_name || 'Unknown',
+        avatar_url: data.avatar_url || '',
+    };
 };
 
 const acknowledge = (ack: ((response: SocketAck) => void) | undefined, response: SocketAck) => {
@@ -196,6 +242,24 @@ const acknowledge = (ack: ((response: SocketAck) => void) | undefined, response:
         ack(response);
     }
 };
+
+/* ─────────────── Async Handler Wrapper ─────────────── */
+
+const wrapAsync = <Args extends unknown[]>(handler: (...args: Args) => Promise<void>) => {
+    return async (...args: Args) => {
+        try {
+            await handler(...args);
+        } catch {
+            const lastArg = args[args.length - 1];
+            acknowledge(lastArg as ((response: SocketAck) => void) | undefined, {
+                ok: false,
+                error: 'Internal server error',
+            });
+        }
+    };
+};
+
+/* ─────────────── Server Setup ─────────────── */
 
 const io = new Server(httpServer, {
     cors: {
@@ -211,180 +275,239 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Studify Backend is running');
 });
 
+/* ─────────────── Socket.IO Auth Middleware ─────────────── */
+
 io.use(async (socket, next) => {
-    const accessToken = getBearerToken(socket);
-    if (!accessToken) {
-        next(new Error('UNAUTHORIZED'));
-        return;
-    }
+    try {
+        const accessToken = getBearerToken(socket);
+        if (!accessToken) {
+            next(new Error('UNAUTHORIZED'));
+            return;
+        }
 
-    const { data, error } = await adminSupabase.auth.getUser(accessToken);
-    if (error || !data.user) {
-        next(new Error('UNAUTHORIZED'));
-        return;
-    }
+        const { data, error } = await adminSupabase.auth.getUser(accessToken);
+        if (error || !data.user) {
+            next(new Error('UNAUTHORIZED'));
+            return;
+        }
 
-    const authedSocket = getAuthenticatedSocket(socket);
-    authedSocket.data.user = data.user;
-    authedSocket.data.accessToken = accessToken;
-    authedSocket.data.supabase = createUserScopedClient(accessToken);
-    next();
+        const authedSocket = getAuthenticatedSocket(socket);
+        authedSocket.data.user = data.user;
+        authedSocket.data.accessToken = accessToken;
+        authedSocket.data.supabase = createUserScopedClient(accessToken);
+        next();
+    } catch {
+        next(new Error('UNAUTHORIZED'));
+    }
 });
+
+/* ─────────────── Socket.IO Connection ─────────────── */
 
 io.on('connection', (socket) => {
     const authedSocket = getAuthenticatedSocket(socket);
     const userId = authedSocket.data.user.id;
 
-    console.log(`[WS] Authenticated client connected: ${socket.id} user=${userId}`);
+    socket.on(
+        'join_dm_room',
+        wrapAsync(async ({ contactId }: { contactId?: string }, ack?: (response: SocketAck) => void) => {
+            if (!isValidUuid(contactId)) {
+                acknowledge(ack, { ok: false, error: 'Invalid contact' });
+                return;
+            }
 
-    socket.on('join_dm_room', async ({ contactId }: { userId?: string; contactId?: string }, ack?: (response: SocketAck) => void) => {
-        if (!isValidUuid(contactId)) {
-            acknowledge(ack, { ok: false, error: 'Invalid contact' });
-            return;
-        }
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+                return;
+            }
 
-        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
-            return;
-        }
+            const roomId = getRoomId(userId, contactId);
+            socket.join(roomId);
+            acknowledge(ack, { ok: true });
+        }),
+    );
 
-        const roomId = getRoomId(userId, contactId);
-        socket.join(roomId);
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] ${socket.id} joined DM room: ${roomId}`);
-    });
+    socket.on(
+        'send_message',
+        wrapAsync(async (message: DirectMessage, ack?: (response: SocketAck) => void) => {
+            if (!messageRateLimiter.check(`msg:${userId}`, 30, 60000)) {
+                acknowledge(ack, { ok: false, error: 'Rate limit exceeded' });
+                return;
+            }
 
-    socket.on('send_message', async (message: DirectMessage, ack?: (response: SocketAck) => void) => {
-        const persistedMessage = await findPersistedDirectMessage(authedSocket.data.supabase, message, userId);
-        if (!persistedMessage) {
-            acknowledge(ack, { ok: false, error: 'Message is not authorized' });
-            return;
-        }
+            const persistedMessage = await findPersistedDirectMessage(authedSocket.data.supabase, message, userId);
+            if (!persistedMessage) {
+                acknowledge(ack, { ok: false, error: 'Message is not authorized' });
+                return;
+            }
 
-        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, persistedMessage.receiver_id);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
-            return;
-        }
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, persistedMessage.receiver_id);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+                return;
+            }
 
-        const roomId = getRoomId(userId, persistedMessage.receiver_id);
-        socket.to(roomId).emit('new_message', persistedMessage);
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] Message broadcast to room ${roomId}`);
-    });
+            const roomId = getRoomId(userId, persistedMessage.receiver_id);
+            socket.to(roomId).emit('new_message', persistedMessage);
+            acknowledge(ack, { ok: true });
+        }),
+    );
 
-    socket.on('delete_message', async (
-        { messageId, contactId }: { messageId?: string; userId?: string; contactId?: string },
-        ack?: (response: SocketAck) => void,
-    ) => {
-        if (!isValidUuid(messageId) || !isValidUuid(contactId)) {
-            acknowledge(ack, { ok: false, error: 'Invalid delete request' });
-            return;
-        }
+    socket.on(
+        'delete_message',
+        wrapAsync(async (
+            { messageId, contactId }: { messageId?: string; contactId?: string },
+            ack?: (response: SocketAck) => void,
+        ) => {
+            if (!isValidUuid(messageId) || !isValidUuid(contactId)) {
+                acknowledge(ack, { ok: false, error: 'Invalid delete request' });
+                return;
+            }
 
-        const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
-            return;
-        }
+            const allowed = await isAcceptedFriend(authedSocket.data.supabase, userId, contactId);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not an accepted contact' });
+                return;
+            }
 
-        const { data, error } = await authedSocket.data.supabase
-            .from('messages')
-            .delete()
-            .eq('id', messageId)
-            .eq('sender_id', userId)
-            .eq('receiver_id', contactId)
-            .select('id')
-            .maybeSingle();
+            const { data, error } = await authedSocket.data.supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId)
+                .eq('sender_id', userId)
+                .eq('receiver_id', contactId)
+                .select('id')
+                .maybeSingle();
 
-        if (error || !data) {
-            acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
-            return;
-        }
+            if (error || !data) {
+                acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
+                return;
+            }
 
-        const roomId = getRoomId(userId, contactId);
-        socket.to(roomId).emit('message_deleted', { messageId });
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] Delete broadcast to room ${roomId}`);
-    });
+            const roomId = getRoomId(userId, contactId);
+            socket.to(roomId).emit('message_deleted', { messageId });
+            acknowledge(ack, { ok: true });
+        }),
+    );
 
-    socket.on('join_group_room', async ({ groupId }: { groupId?: string }, ack?: (response: SocketAck) => void) => {
-        if (!isValidUuid(groupId)) {
-            acknowledge(ack, { ok: false, error: 'Invalid group' });
-            return;
-        }
+    socket.on(
+        'join_group_room',
+        wrapAsync(async ({ groupId }: { groupId?: string }, ack?: (response: SocketAck) => void) => {
+            if (!isValidUuid(groupId)) {
+                acknowledge(ack, { ok: false, error: 'Invalid group' });
+                return;
+            }
 
-        const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not a group member' });
-            return;
-        }
+            const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not a group member' });
+                return;
+            }
 
-        socket.join(`group_${groupId}`);
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] ${socket.id} joined group room: group_${groupId}`);
-    });
+            socket.join(`group_${groupId}`);
+            acknowledge(ack, { ok: true });
+        }),
+    );
 
-    socket.on('send_group_message', async (message: GroupMessage, ack?: (response: SocketAck) => void) => {
-        const persistedMessage = await findPersistedGroupMessage(authedSocket.data.supabase, message, userId);
-        if (!persistedMessage) {
-            acknowledge(ack, { ok: false, error: 'Message is not authorized' });
-            return;
-        }
+    socket.on(
+        'send_group_message',
+        wrapAsync(async (message: GroupMessage, ack?: (response: SocketAck) => void) => {
+            if (!messageRateLimiter.check(`group_msg:${userId}`, 30, 60000)) {
+                acknowledge(ack, { ok: false, error: 'Rate limit exceeded' });
+                return;
+            }
 
-        const allowed = await isGroupMember(authedSocket.data.supabase, userId, persistedMessage.group_id);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not a group member' });
-            return;
-        }
+            const persistedMessage = await findPersistedGroupMessage(authedSocket.data.supabase, message, userId);
+            if (!persistedMessage) {
+                acknowledge(ack, { ok: false, error: 'Message is not authorized' });
+                return;
+            }
 
-        socket.to(`group_${persistedMessage.group_id}`).emit('new_group_message', {
-            ...persistedMessage,
-            profiles: message.profiles,
-        });
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] Group message broadcast to group_${persistedMessage.group_id}`);
-    });
+            const allowed = await isGroupMember(authedSocket.data.supabase, userId, persistedMessage.group_id);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not a group member' });
+                return;
+            }
 
-    socket.on('delete_group_message', async (
-        { messageId, groupId }: { messageId?: string; groupId?: string },
-        ack?: (response: SocketAck) => void,
-    ) => {
-        if (!isValidUuid(messageId) || !isValidUuid(groupId)) {
-            acknowledge(ack, { ok: false, error: 'Invalid delete request' });
-            return;
-        }
+            const senderProfile = await fetchSenderProfile(authedSocket.data.supabase, userId);
 
-        const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
-        if (!allowed) {
-            acknowledge(ack, { ok: false, error: 'Not a group member' });
-            return;
-        }
+            socket.to(`group_${persistedMessage.group_id}`).emit('new_group_message', {
+                ...persistedMessage,
+                profiles: senderProfile,
+            });
+            acknowledge(ack, { ok: true });
+        }),
+    );
 
-        const { data, error } = await authedSocket.data.supabase
-            .from('messages')
-            .delete()
-            .eq('id', messageId)
-            .eq('sender_id', userId)
-            .eq('group_id', groupId)
-            .select('id')
-            .maybeSingle();
+    socket.on(
+        'delete_group_message',
+        wrapAsync(async (
+            { messageId, groupId }: { messageId?: string; groupId?: string },
+            ack?: (response: SocketAck) => void,
+        ) => {
+            if (!isValidUuid(messageId) || !isValidUuid(groupId)) {
+                acknowledge(ack, { ok: false, error: 'Invalid delete request' });
+                return;
+            }
 
-        if (error || !data) {
-            acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
-            return;
-        }
+            const allowed = await isGroupMember(authedSocket.data.supabase, userId, groupId);
+            if (!allowed) {
+                acknowledge(ack, { ok: false, error: 'Not a group member' });
+                return;
+            }
 
-        socket.to(`group_${groupId}`).emit('group_message_deleted', { messageId });
-        acknowledge(ack, { ok: true });
-        console.log(`[WS] Group delete broadcast to group_${groupId}`);
-    });
+            const { data, error } = await authedSocket.data.supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId)
+                .eq('sender_id', userId)
+                .eq('group_id', groupId)
+                .select('id')
+                .maybeSingle();
 
-    socket.on('disconnect', () => {
-        console.log(`[WS] Client disconnected: ${socket.id}`);
-    });
+            if (error || !data) {
+                acknowledge(ack, { ok: false, error: 'Message could not be deleted' });
+                return;
+            }
+
+            socket.to(`group_${groupId}`).emit('group_message_deleted', { messageId });
+            acknowledge(ack, { ok: true });
+        }),
+    );
 });
+
+/* ─────────────── Express Global Error Handler ─────────────── */
+
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+});
+
+/* ─────────────── Graceful Shutdown ─────────────── */
+
+const gracefulShutdown = (signal: string) => {
+    httpServer.close(() => {
+        process.exit(0);
+    });
+
+    setTimeout(() => {
+        process.exit(1);
+    }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+/* ─────────────── Periodic cleanup ─────────────── */
+
+const cleanupInterval = setInterval(() => {
+    messageRateLimiter.cleanup();
+}, 60000);
+
+process.on('exit', () => {
+    clearInterval(cleanupInterval);
+});
+
+/* ─────────────── Start ─────────────── */
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
