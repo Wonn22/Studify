@@ -159,9 +159,19 @@ const MessagesPage = () => {
 
     useEffect(() => {
         if (!socket || contacts.length === 0) return;
-        contacts.forEach(contact => {
-            socket.emit('join_dm_room', { contactId: contact.id });
-        });
+
+        const joinAllRooms = () => {
+            contacts.forEach(contact => {
+                socket.emit('join_dm_room', { contactId: contact.id });
+            });
+        };
+
+        joinAllRooms();
+        socket.on('connect', joinAllRooms);
+
+        return () => {
+            socket.off('connect', joinAllRooms);
+        };
     }, [socket, contacts]);
 
     useEffect(() => {

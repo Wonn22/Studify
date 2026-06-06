@@ -52,7 +52,7 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
   }, [groupId]);
 
   useEffect(() => {
-    if (!groupId || !currentUser || !canAccess) return;
+    if (!groupId || !currentUser || !canAccess || !socket) return;
 
     const fetchMessages = async () => {
       const { data, error } = await supabase
@@ -80,8 +80,13 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
       setTimeout(scrollToBottom, 100);
     };
 
+    const joinRoom = () => {
+      socket.emit('join_group_room', { groupId });
+    };
+
     fetchMessages();
-    socket?.emit('join_group_room', { groupId });
+    joinRoom();
+    socket.on('connect', joinRoom);
 
     const onNewGroupMessage = (msg: Message) => {
       setMessages(prev => {
@@ -104,16 +109,17 @@ const DiscussionView = ({ groupId, readOnly }: { groupId?: string; readOnly?: bo
       setTypingUsers(prev => prev.filter(u => u.userId !== uid));
     };
 
-    socket?.on('new_group_message', onNewGroupMessage);
-    socket?.on('group_message_deleted', onGroupMessageDeleted);
-    socket?.on('typing_start_group', onTypingStartGroup);
-    socket?.on('typing_stop_group', onTypingStopGroup);
+    socket.on('new_group_message', onNewGroupMessage);
+    socket.on('group_message_deleted', onGroupMessageDeleted);
+    socket.on('typing_start_group', onTypingStartGroup);
+    socket.on('typing_stop_group', onTypingStopGroup);
 
     return () => {
-      socket?.off('new_group_message', onNewGroupMessage);
-      socket?.off('group_message_deleted', onGroupMessageDeleted);
-      socket?.off('typing_start_group', onTypingStartGroup);
-      socket?.off('typing_stop_group', onTypingStopGroup);
+      socket.off('connect', joinRoom);
+      socket.off('new_group_message', onNewGroupMessage);
+      socket.off('group_message_deleted', onGroupMessageDeleted);
+      socket.off('typing_start_group', onTypingStartGroup);
+      socket.off('typing_stop_group', onTypingStopGroup);
     };
   }, [groupId, socket, currentUser, canAccess]);
 
