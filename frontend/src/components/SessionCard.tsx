@@ -55,11 +55,17 @@ const SessionCard = ({ title, time, tag, members, partner, isGroup, scheduledAt,
 
                 <h3 className="text-xl font-bold mt-4 text-slate-900 leading-tight font-headline">{title}</h3>
 
-                <div className="mt-6 flex items-center gap-4 text-slate-500 text-sm">
+                <div className="mt-6 flex items-center gap-4 text-slate-500 text-sm flex-wrap">
                     <div className="flex items-center gap-1">
                         <span className="material-symbols-outlined text-sm">{isGroup ? 'groups' : 'person'}</span>
                         <span>{isGroup ? `${members} Members` : `With ${partner}`}</span>
                     </div>
+                    {scheduledAt && (
+                        <div className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">calendar_today</span>
+                            <span>{new Date(scheduledAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        </div>
+                    )}
                     <div className="flex items-center gap-1">
                         <span className="material-symbols-outlined text-sm">schedule</span>
                         <span>{time}</span>
