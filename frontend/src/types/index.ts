@@ -64,6 +64,7 @@ export interface Message {
   receiver_id: string | null;
   group_id: string | null;
   content: string;
+  is_read: boolean;
   created_at: string;
 }
 

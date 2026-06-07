@@ -78,6 +78,13 @@ const Navbar = () => {
             >
               Connections
             </button>
+            <button
+              onClick={() => navigate('/support')}
+              className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/support') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+            >
+              <span className="material-symbols-outlined text-sm align-middle mr-1">support_agent</span>
+              Support
+            </button>
             {isAdmin && (
               <button
                 onClick={() => navigate('/admin')}

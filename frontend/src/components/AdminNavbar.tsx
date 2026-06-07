@@ -65,6 +65,13 @@ const AdminNavbar = () => {
               <span className="material-symbols-outlined text-sm align-middle mr-1">group</span>
               Users
             </button>
+            <button
+              onClick={() => navigate('/admin/support')}
+              className={`pb-1 border-b-2 transition-colors ${location.pathname === '/admin/support' ? 'text-white border-white' : 'text-slate-400 border-transparent hover:text-white'}`}
+            >
+              <span className="material-symbols-outlined text-sm align-middle mr-1">support_agent</span>
+              Support
+            </button>
           </nav>
         </div>
 

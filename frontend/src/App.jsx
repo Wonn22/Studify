@@ -13,6 +13,8 @@ import ProjectWorkspace from './views/ProjectWorkspace'
 import ConnectionsPage from './views/ConnectionsPage'
 import AdminPage from './views/AdminPage'
 import AdminUsersPage from './views/AdminUsersPage'
+import SupportPage from './views/SupportPage'
+import AdminSupportPage from './views/AdminSupportPage'
 import AdminRouteGuard from './components/AdminRouteGuard'
 
 function App() {
@@ -27,6 +29,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/browse-sessions" element={<BrowseSessions />} />
             <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/support" element={<SupportPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/match" element={<FindPage />} />
@@ -35,6 +38,7 @@ function App() {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/admin" element={<AdminRouteGuard><AdminPage /></AdminRouteGuard>} />
             <Route path="/admin/users" element={<AdminRouteGuard><AdminUsersPage /></AdminRouteGuard>} />
+            <Route path="/admin/support" element={<AdminRouteGuard><AdminSupportPage /></AdminRouteGuard>} />
           </Route>
         </Routes>
       </BrowserRouter>
