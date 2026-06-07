@@ -8,6 +8,7 @@ const Navbar = () => {
   const location = useLocation();
   const [userName, setUserName] = useState<string>('Guest');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -18,11 +19,12 @@ const Navbar = () => {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('avatar_url')
+          .select('avatar_url, is_admin')
           .eq('id', user.id)
           .single();
 
         setAvatarUrl(profile?.avatar_url || null);
+        setIsAdmin(profile?.is_admin === true);
       }
     };
 
@@ -76,6 +78,15 @@ const Navbar = () => {
             >
               Connections
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                className={`pb-1 border-b-2 transition-colors ${location.pathname.startsWith('/admin') ? 'text-white border-white' : 'text-blue-200/70 border-transparent hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined text-sm align-middle mr-1">shield</span>
+                Admin
+              </button>
+            )}
           </nav>
         </div>
 

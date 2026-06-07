@@ -84,6 +84,20 @@ export interface Friendship {
   created_at: string;
 }
 
+export interface UserReport {
+  id: string;
+  reporter_id: string;
+  reported_id: string;
+  reason: string;
+  description: string | null;
+  status: 'Pending' | 'Reviewed' | 'Resolved' | 'Dismissed';
+  created_at: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  reporter?: Profile;
+  reported?: Profile;
+}
+
 export interface Notification {
   id: string;
   recipient_id: string;

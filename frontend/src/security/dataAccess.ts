@@ -238,6 +238,35 @@ export const createUserReport = async (payload: {
   return { data, error };
 };
 
+export const isUserAdmin = async (userId?: string | null): Promise<boolean> => {
+  if (!isValidUuid(userId)) return false;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', userId)
+    .single();
+  if (error || !data) return false;
+  return data.is_admin === true;
+};
+
+export const getAllReports = async () => {
+  const { data, error } = await supabase
+    .from('user_reports')
+    .select('*, reporter:reporter_id(full_name, avatar_url), reported:reported_id(full_name, avatar_url)')
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+export const updateReportStatus = async (reportId: string, status: string, resolvedBy: string) => {
+  const { data, error } = await supabase
+    .from('user_reports')
+    .update({ status, resolved_by: resolvedBy, resolved_at: new Date().toISOString() })
+    .eq('id', reportId)
+    .select()
+    .single();
+  return { data, error };
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 

@@ -11,6 +11,8 @@ import FindPage from './views/FindPage'
 import GroupsPage from './views/GroupsPage'
 import ProjectWorkspace from './views/ProjectWorkspace'
 import ConnectionsPage from './views/ConnectionsPage'
+import AdminPage from './views/AdminPage'
+import AdminRouteGuard from './components/AdminRouteGuard'
 
 function App() {
   return (
@@ -30,6 +32,7 @@ function App() {
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:groupId" element={<ProjectWorkspace />} />
             <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/admin" element={<AdminRouteGuard><AdminPage /></AdminRouteGuard>} />
           </Route>
         </Routes>
       </BrowserRouter>
