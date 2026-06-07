@@ -220,6 +220,24 @@ export const isGroupAdmin = async (groupId?: string | null, userId?: string | nu
   return Boolean(data);
 };
 
+export const createUserReport = async (payload: {
+  reporter_id: string;
+  reported_id: string;
+  reason: string;
+  description?: string;
+}) => {
+  if (!isValidUuid(payload.reporter_id) || !isValidUuid(payload.reported_id)) {
+    return { error: new Error('Invalid reporter or reported ID') };
+  }
+  const { data, error } = await supabase.from('user_reports').insert({
+    reporter_id: payload.reporter_id,
+    reported_id: payload.reported_id,
+    reason: payload.reason,
+    description: payload.description || null,
+  }).select().single();
+  return { data, error };
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 

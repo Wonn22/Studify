@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../database/database';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, type FriendshipStatus } from '../security/dataAccess';
+import { getFriendshipStatus, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, createUserReport, type FriendshipStatus } from '../security/dataAccess';
+import ReportUserModal from '../components/ReportUserModal';
 
 interface UserProfile {
     id: string;
@@ -305,6 +306,7 @@ const ProfilePage = () => {
     const [loading, setLoading] = useState(true);
     const [showEdit, setShowEdit] = useState(false);
     const [showShare, setShowShare] = useState(false);
+    const [showReport, setShowReport] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus['status']>(null);
     const [isRequester, setIsRequester] = useState(false);
@@ -434,6 +436,23 @@ const ProfilePage = () => {
             {showShare && profile && (
                 <ShareModal profile={profile} onClose={() => setShowShare(false)} />
             )}
+            {showReport && profile && currentUserId && (
+                <ReportUserModal
+                    reportedId={profile.id}
+                    reportedName={profile.full_name}
+                    reporterId={currentUserId}
+                    onClose={() => setShowReport(false)}
+                    onSubmit={async (reason, description) => {
+                        const { error } = await createUserReport({
+                            reporter_id: currentUserId,
+                            reported_id: profile.id,
+                            reason,
+                            description,
+                        });
+                        return { error };
+                    }}
+                />
+            )}
             <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100">
                 <div className="flex items-center gap-4 w-full px-6 h-16">
                     <button
@@ -501,9 +520,14 @@ const ProfilePage = () => {
                                 </button>
                             )}
                             {!isOwnProfile && (
-                                <button onClick={() => setShowShare(true)} className="w-full border-2 border-primary-container text-primary-container py-3 rounded-lg font-semibold hover:bg-primary-container hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
-                                    <span className="material-symbols-outlined text-lg">share</span> Share Portfolio
-                                </button>
+                                <>
+                                    <button onClick={() => setShowShare(true)} className="w-full border-2 border-primary-container text-primary-container py-3 rounded-lg font-semibold hover:bg-primary-container hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">share</span> Share Portfolio
+                                    </button>
+                                    <button onClick={() => setShowReport(true)} className="w-full border-2 border-red-200 text-red-500 py-3 rounded-lg font-semibold hover:bg-red-50 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <span className="material-symbols-outlined text-lg">flag</span> Report User
+                                    </button>
+                                </>
                             )}
                         </div>
 

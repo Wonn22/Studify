@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { supabase } from '../database/database';
 import { useNavigate } from 'react-router-dom';
-import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest } from '../security/dataAccess';
+import { isValidUuid, sendFriendRequest, acceptFriendRequest, cancelFriendRequest, createUserReport } from '../security/dataAccess';
 import { Friendship } from '../types';
+import ReportUserModal from '../components/ReportUserModal';
 
 interface Profile {
   id: string;
@@ -22,6 +23,8 @@ const FindPage = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReportProfile, setSelectedReportProfile] = useState<Profile | null>(null);
 
   const filteredProfiles = profiles.filter(p => {
     const query = searchQuery.toLowerCase();
@@ -222,12 +225,37 @@ const FindPage = () => {
                       <span className="material-symbols-outlined text-sm">bolt</span>
                     </button>
                   )}
+                  <button
+                    onClick={() => { setSelectedReportProfile(profile); setShowReportModal(true); }}
+                    className="w-full mt-2 text-xs text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[0.875rem]">flag</span>
+                    Report
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         </main>
       </div>
+
+      {showReportModal && selectedReportProfile && currentUser && (
+        <ReportUserModal
+          reportedId={selectedReportProfile.id}
+          reportedName={selectedReportProfile.full_name}
+          reporterId={currentUser.id}
+          onClose={() => setShowReportModal(false)}
+          onSubmit={async (reason, description) => {
+            const { error } = await createUserReport({
+              reporter_id: currentUser.id,
+              reported_id: selectedReportProfile.id,
+              reason,
+              description,
+            });
+            return { error };
+          }}
+        />
+      )}
 
       <footer className="w-full flex flex-col items-center gap-6 px-8 py-12 bg-[#000613] text-white">
         <div className="flex flex-col md:flex-row justify-between w-full max-w-7xl items-center gap-8">
