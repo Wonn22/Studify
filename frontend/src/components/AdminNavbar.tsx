@@ -55,8 +55,15 @@ const AdminNavbar = () => {
               onClick={() => navigate('/admin')}
               className={`pb-1 border-b-2 transition-colors ${location.pathname === '/admin' ? 'text-white border-white' : 'text-slate-400 border-transparent hover:text-white'}`}
             >
-              <span className="material-symbols-outlined text-sm align-middle mr-1">dashboard</span>
+              <span className="material-symbols-outlined text-sm align-middle mr-1">flag</span>
               Reports
+            </button>
+            <button
+              onClick={() => navigate('/admin/users')}
+              className={`pb-1 border-b-2 transition-colors ${location.pathname === '/admin/users' ? 'text-white border-white' : 'text-slate-400 border-transparent hover:text-white'}`}
+            >
+              <span className="material-symbols-outlined text-sm align-middle mr-1">group</span>
+              Users
             </button>
           </nav>
         </div>

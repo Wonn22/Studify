@@ -7,6 +7,7 @@ export interface Profile {
   interests: string[] | null;
   total_study_time_hours: number;
   consistency_percent: number;
+  account_status: 'active' | 'warned' | 'suspended' | 'banned';
   created_at: string;
 }
 

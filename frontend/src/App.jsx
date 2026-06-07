@@ -12,6 +12,7 @@ import GroupsPage from './views/GroupsPage'
 import ProjectWorkspace from './views/ProjectWorkspace'
 import ConnectionsPage from './views/ConnectionsPage'
 import AdminPage from './views/AdminPage'
+import AdminUsersPage from './views/AdminUsersPage'
 import AdminRouteGuard from './components/AdminRouteGuard'
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
             <Route path="/groups/:groupId" element={<ProjectWorkspace />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/admin" element={<AdminRouteGuard><AdminPage /></AdminRouteGuard>} />
+            <Route path="/admin/users" element={<AdminRouteGuard><AdminUsersPage /></AdminRouteGuard>} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -267,6 +267,27 @@ export const updateReportStatus = async (reportId: string, status: string, resol
   return { data, error };
 };
 
+export const getAllUsers = async () => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url, major, account_status, created_at')
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+export const updateUserStatus = async (userId: string, accountStatus: string) => {
+  if (!isValidUuid(userId)) {
+    return { error: new Error('Invalid user ID') };
+  }
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ account_status: accountStatus })
+    .eq('id', userId)
+    .select()
+    .single();
+  return { data, error };
+};
+
 export const getProjectFilesStoragePath = (publicUrl?: string | null) => {
   if (!publicUrl) return null;
 

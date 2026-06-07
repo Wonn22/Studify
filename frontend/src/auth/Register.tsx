@@ -54,6 +54,7 @@ export default function Register() {
                     .upsert({
                         id: data.user.id,
                         full_name: 'Scholar',
+                        account_status: 'active',
                     }, { onConflict: 'id' });
 
                 if (profileError) {

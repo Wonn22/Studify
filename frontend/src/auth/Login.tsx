@@ -50,6 +50,26 @@ export default function Login() {
       if (error) throw error;
 
       if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('account_status')
+          .eq('id', data.user.id)
+          .single();
+
+        const status = profile?.account_status;
+        if (status === 'banned') {
+          await supabase.auth.signOut();
+          setError('Your account has been banned. Contact support for assistance.');
+          setIsLoading(false);
+          return;
+        }
+        if (status === 'suspended') {
+          await supabase.auth.signOut();
+          setError('Your account has been suspended. Contact support for assistance.');
+          setIsLoading(false);
+          return;
+        }
+
         navigate(redirectTo, { replace: true });
       }
     } catch (err: any) {
