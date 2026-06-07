@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar';
+import AdminNavbar from '../components/AdminNavbar';
 import { getAllReports, updateReportStatus, getCurrentSessionUser } from '../security/dataAccess';
 import type { UserReport } from '../types';
 
@@ -101,7 +101,7 @@ const AdminPage = () => {
 
   return (
     <div className="min-h-screen bg-surface">
-      <Navbar />
+      <AdminNavbar />
 
       <main className="pt-24 pb-16 px-6 lg:px-12 max-w-7xl mx-auto">
         <div className="mb-10">
