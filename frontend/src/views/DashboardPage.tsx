@@ -50,7 +50,7 @@ const Dashboard = () => {
                     .from('session_participants')
                     .select(`
                         sessions (
-                            id, title, subject, scheduled_at, duration_minutes
+                            id, title, subject, scheduled_at, duration_minutes, meeting_link
                         )
                     `)
                     .eq('profile_id', user.id);
@@ -115,7 +115,8 @@ const Dashboard = () => {
                             isGroup: true,
                             members: participantCounts[s.id] || 1,
                             scheduledAt: s.scheduled_at,
-                            durationMinutes: s.duration_minutes
+                            durationMinutes: s.duration_minutes,
+                            meetingLink: s.meeting_link
                         };
                     });
                     setSessions(mappedSessions);

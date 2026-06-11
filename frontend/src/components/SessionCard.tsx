@@ -9,9 +9,10 @@ interface SessionProps {
     isGroup: boolean;
     scheduledAt?: string;
     durationMinutes?: number;
+    meetingLink?: string | null;
 }
 
-const SessionCard = ({ title, time, tag, members, partner, isGroup, scheduledAt, durationMinutes }: SessionProps) => {
+const SessionCard = ({ title, time, tag, members, partner, isGroup, scheduledAt, durationMinutes, meetingLink }: SessionProps) => {
     const [showPopup, setShowPopup] = useState(false);
     const [isLive, setIsLive] = useState(false);
 
@@ -30,11 +31,23 @@ const SessionCard = ({ title, time, tag, members, partner, isGroup, scheduledAt,
     }, [scheduledAt, durationMinutes]);
 
     const handleJoin = () => {
-        if (isLive) {
-            alert("Joining session...");
-        } else {
+        if (!isLive) {
             setShowPopup(true);
+            return;
         }
+
+        const trimmedMeetingLink = meetingLink?.trim();
+
+        if (!trimmedMeetingLink) {
+            alert('Meeting link is not available for this session.');
+            return;
+        }
+
+        const targetUrl = /^https?:\/\//i.test(trimmedMeetingLink)
+            ? trimmedMeetingLink
+            : `https://${trimmedMeetingLink}`;
+
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
     };
     return (
         <div className="bg-white p-8 rounded-lg relative overflow-hidden group hover:shadow-2xl hover:shadow-primary/5 transition-all duration-300 border border-slate-100">

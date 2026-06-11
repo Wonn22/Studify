@@ -92,8 +92,6 @@ const createUserScopedClient = (accessToken: string) =>
         },
     });
 
-/* ─────────────── Rate Limiter ─────────────── */
-
 class RateLimiter {
     private map = new Map<string, { count: number; resetAt: number }>();
 
@@ -122,8 +120,6 @@ class RateLimiter {
 }
 
 const messageRateLimiter = new RateLimiter();
-
-/* ─────────────── Helpers ─────────────── */
 
 const isAcceptedFriend = async (client: SupabaseClient, userId: string, contactId: string) => {
     if (!isValidUuid(userId) || !isValidUuid(contactId) || userId === contactId) return false;
@@ -243,8 +239,6 @@ const acknowledge = (ack: ((response: SocketAck) => void) | undefined, response:
     }
 };
 
-/* ─────────────── Async Handler Wrapper ─────────────── */
-
 const wrapAsync = <Args extends unknown[]>(handler: (...args: Args) => Promise<void>) => {
     return async (...args: Args) => {
         try {
@@ -259,8 +253,6 @@ const wrapAsync = <Args extends unknown[]>(handler: (...args: Args) => Promise<v
     };
 };
 
-/* ─────────────── Server Setup ─────────────── */
-
 const io = new Server(httpServer, {
     cors: {
         origin: FRONTEND_ORIGIN,
@@ -274,8 +266,6 @@ app.use(express.json());
 app.get('/', (req: Request, res: Response) => {
     res.send('Studify Backend is running');
 });
-
-/* ─────────────── Socket.IO Auth Middleware ─────────────── */
 
 io.use(async (socket, next) => {
     try {
@@ -300,8 +290,6 @@ io.use(async (socket, next) => {
         next(new Error('UNAUTHORIZED'));
     }
 });
-
-/* ─────────────── Socket.IO Connection ─────────────── */
 
 io.on('connection', (socket) => {
     const authedSocket = getAuthenticatedSocket(socket);
@@ -475,8 +463,6 @@ io.on('connection', (socket) => {
         }),
     );
 
-    /* ── Typing indicators (DM) ── */
-
     socket.on(
         'typing_start_dm',
         wrapAsync(async ({ contactId }: { contactId?: string }) => {
@@ -500,8 +486,6 @@ io.on('connection', (socket) => {
         }),
     );
 
-    /* ── Typing indicators (Group) ── */
-
     socket.on(
         'typing_start_group',
         wrapAsync(async ({ groupId }: { groupId?: string }) => {
@@ -522,8 +506,6 @@ io.on('connection', (socket) => {
             socket.to(`group_${groupId}`).emit('typing_stop_group', { userId });
         }),
     );
-
-    /* ── Read receipts ── */
 
     socket.on(
         'mark_messages_read',
@@ -558,13 +540,9 @@ io.on('connection', (socket) => {
     );
 });
 
-/* ─────────────── Express Global Error Handler ─────────────── */
-
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ ok: false, error: 'Internal server error' });
 });
-
-/* ─────────────── Graceful Shutdown ─────────────── */
 
 const gracefulShutdown = (signal: string) => {
     httpServer.close(() => {
@@ -579,8 +557,6 @@ const gracefulShutdown = (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-/* ─────────────── Periodic cleanup ─────────────── */
-
 const cleanupInterval = setInterval(() => {
     messageRateLimiter.cleanup();
 }, 60000);
@@ -588,8 +564,6 @@ const cleanupInterval = setInterval(() => {
 process.on('exit', () => {
     clearInterval(cleanupInterval);
 });
-
-/* ─────────────── Start ─────────────── */
 
 httpServer.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
